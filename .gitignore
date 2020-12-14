@@ -3,3 +3,4 @@ build/*
 
 # Project/editor files
 .vscode/*
+tags

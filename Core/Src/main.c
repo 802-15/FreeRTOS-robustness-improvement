@@ -19,6 +19,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -64,6 +65,9 @@ static void blinkTask(void *pvParameters)
 	const TickType_t xDelay = 1000/portTICK_RATE_MS;
 
 	while (1) {
+
+    USART1_SendString("Hello world!\r\n");
+
     vTaskDelay(xDelay);
 		gpio_led_state(LED3_ORANGE_ID, 1);
     gpio_led_state(LED4_GREEN_ID, 1);
@@ -89,6 +93,7 @@ int main(void)
   HAL_Init();
   SystemClock_Config();
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
 
   xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);
 
