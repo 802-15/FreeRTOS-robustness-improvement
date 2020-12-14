@@ -1,0 +1,5 @@
+# Build directory
+build/*
+
+# Project/editor files
+.vscode/*
