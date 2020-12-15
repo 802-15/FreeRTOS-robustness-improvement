@@ -93,6 +93,16 @@ endif
 HEX = $(CP) -O ihex
 BIN = $(CP) -O binary -S
 
+#######################################
+# debug information
+#######################################
+ifdef GCC_PATH
+DBG = $(GCC_PATH)/$(PREFIX)gdb
+OOCD = $(GCC_PATH)/openocd
+else
+DBG = $(PREFIX)gdb
+OOCD = openocd
+endif
 
 #######################################
 # CFLAGS
@@ -196,6 +206,16 @@ $(BUILD_DIR):
 #######################################
 flash: $(BUILD_DIR)/$(TARGET).bin
 	st-flash --reset write $^ 0x8000000
+
+#######################################
+# debug
+# run: 1) gdbserver 2) debug
+#######################################
+gdbserver:
+	$(OOCD) -f Core/stm32f4discovery.cfg
+
+debug:
+	$(DBG) -x Core/script.gdb $(BUILD_DIR)/$(TARGET).elf
 
 #######################################
 # clean up
