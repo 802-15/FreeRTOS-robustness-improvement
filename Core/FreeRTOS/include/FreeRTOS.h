@@ -252,6 +252,21 @@
     #define configIDLE_SHOULD_YIELD    1
 #endif
 
+#ifndef configUSE_TEMPORAL_REDUNDANCY
+    #define configUSE_TEMPORAL_REDUNDANCY 0
+#endif
+
+/* Additional criteria must be met for using temporal redundancy */
+#if configUSE_TEMPORAL_REDUNDANCY == 1
+    #if configSUPPORT_DYNAMIC_ALLOCATION == 0
+        #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configSUPPORT_DYNAMIC_ALLOCATION == 1 must also be set.
+    #endif
+
+    #if configENABLE_MPU == 1
+        #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configENABLE_MPU == 0 must also be set.
+    #endif
+#endif
+
 #if configMAX_TASK_NAME_LEN < 1
     #error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
 #endif

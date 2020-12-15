@@ -251,14 +251,25 @@
                     }
                 }
             #else /* if ( configSUPPORT_STATIC_ALLOCATION == 1 ) */
-                {
-                    xReturn = xTaskCreate( prvTimerTask,
-                                           configTIMER_SERVICE_TASK_NAME,
-                                           configTIMER_TASK_STACK_DEPTH,
-                                           NULL,
-                                           ( ( UBaseType_t ) configTIMER_TASK_PRIORITY ) | portPRIVILEGE_BIT,
-                                           &xTimerTaskHandle );
-                }
+                #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+                    {
+                        xReturn = xTaskCreateInstance( prvTimerTask,
+                                                       configTIMER_SERVICE_TASK_NAME,
+                                                       configTIMER_TASK_STACK_DEPTH,
+                                                       NULL,
+                                                       ( ( UBaseType_t ) configTIMER_TASK_PRIORITY ) | portPRIVILEGE_BIT,
+                                                       &xTimerTaskHandle );
+                    }
+                #else
+                    {
+                        xReturn = xTaskCreate( prvTimerTask,
+                                            configTIMER_SERVICE_TASK_NAME,
+                                            configTIMER_TASK_STACK_DEPTH,
+                                            NULL,
+                                            ( ( UBaseType_t ) configTIMER_TASK_PRIORITY ) | portPRIVILEGE_BIT,
+                                            &xTimerTaskHandle );
+                    }
+                #endif /* configUSE_TEMPORAL_REDUNDANCY */
             #endif /* configSUPPORT_STATIC_ALLOCATION */
         }
         else

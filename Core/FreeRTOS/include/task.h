@@ -345,6 +345,88 @@ typedef enum
                             TaskHandle_t * const pxCreatedTask ) PRIVILEGED_FUNCTION;
 #endif
 
+#if ( ( configSUPPORT_DYNAMIC_ALLOCATION  == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 1 ) )
+
+/**
+ * task. h
+ * <pre>
+ * BaseType_t xTaskCreateInstance( TaskFunction_t pvTaskCode,
+ *                                 const char * const pcName,
+ *                                 configSTACK_DEPTH_TYPE usStackDepth,
+ *                                 void *pvParameters,
+ *                                 UBaseType_t uxPriority,
+ *                                 TaskHandle_t *pvCreatedTask);
+ * </pre>
+ * This function is used to create a single non-redundant task instance for private FreeRTOS tasks (e.g. software timer)
+ */
+    BaseType_t xTaskCreateInstance( TaskFunction_t pxTaskCode,
+                                    const char * const pcName,
+                                    const configSTACK_DEPTH_TYPE usStackDepth,
+                                    void * const pvParameters,
+                                    UBaseType_t uxPriority,
+                                    TaskHandle_t * const pxCreatedTask ) PRIVILEGED_FUNCTION;
+
+/**
+ * task. h
+ * <pre>
+ * BaseType_t xTaskInstanceDone(TaskHandle_t taskHandle,
+ *                              UBaseType_t uxExecResult,
+ *                              TickType_t uxDelayTime ) PRIVILEGED_FUNCTION;
+ * </pre>
+ *
+ * Explicitly mark the end of one instance of the task.
+ *
+ * After this function has been called the current redundant task instance will
+ * be suspended using vTaskSuspend(), and the execution of the other instance
+ * will start. If both instances are finished, the execution result and count
+ * are evaluated. Optional faliure callbacks and delay time can also be specified.
+ *
+ * @param handle         Redundant task handle
+ * @param uxExecResult   This variable stores the task execution result for the current instance
+ * @param uxDelayTime    Optional argument: call vTaskDelay for this number of ticks
+ *                       if execution was successfull
+ * */
+    BaseType_t xTaskInstanceDone(TaskHandle_t taskHandle,
+                                 UBaseType_t uxExecResult,
+                                 TickType_t uxDelayTime ) PRIVILEGED_FUNCTION;
+
+/**
+ * task. h
+ * <pre>
+ * void xTaskRedundantResume( TaskHandle_t xTaskToResume) PRIVILEGED_FUNCTION;
+ * </pre>
+ *
+ * Start executing the redundant task after faliure.
+ *
+ * After faliure has been detected in xTaskInstanceDone( <params> ), the redundant
+ * task instances will enter suspended state. The user should define an application level
+ * error callback funtion to stop resolve any issues. After that vTaskRedundantResume()
+ * should be called to continue executing the task instances.
+ *
+ * @param handle Redundant task handle
+ * */
+    void vTaskRedundantResume( TaskHandle_t xTaskToResume ) PRIVILEGED_FUNCTION;
+
+/**
+ * task. h
+ * <pre>
+ * void vTaskRegisterFailureHandle( TaskHandle_t taskHandle,
+ *                                  void ( *pvFailureFunc ) ( void ) );
+ * </pre>
+ *
+ * Register failure function for a redundant task.
+ *
+ * The function pointer must be supplied in the argument. The function itself should run
+ * some kind of error handling defined by the user. After the function is done, a call should
+ * be made to vTaskRedundantResume().
+ *
+ * @param taskHandle Redundant task handle
+ * @param pvFailureFunc Pointer to the failure function
+ * */
+    void vTaskRegisterFailureHandle( TaskHandle_t taskHandle,
+                                     void ( *pvFailureFunc ) ( void ) );
+#endif
+
 /**
  * task. h
  * <pre>

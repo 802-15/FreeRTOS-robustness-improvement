@@ -61,25 +61,25 @@ void SystemClock_Config(void);
 
 static void blinkTask(void *pvParameters)
 {
-	(void) pvParameters;
-	const TickType_t xDelay = 1000/portTICK_RATE_MS;
+  (void) pvParameters;
+  const TickType_t xDelay = 1000/portTICK_RATE_MS;
 
-	while (1) {
+  while (1) {
 
     USART1_SendString("Hello world!\r\n");
 
-    vTaskDelay(xDelay);
-		gpio_led_state(LED3_ORANGE_ID, 1);
+    gpio_led_state(LED3_ORANGE_ID, 1);
     gpio_led_state(LED4_GREEN_ID, 1);
     gpio_led_state(LED5_RED_ID, 0);
     gpio_led_state(LED6_BLUE_ID, 0);
-
     vTaskDelay(xDelay);
+
     gpio_led_state(LED3_ORANGE_ID, 0);
     gpio_led_state(LED4_GREEN_ID, 0);
     gpio_led_state(LED5_RED_ID, 1);
     gpio_led_state(LED6_BLUE_ID, 1);
-	}
+    vTaskDelay(xDelay);
+  }
 }
 
 /* USER CODE END 0 */
@@ -90,12 +90,18 @@ static void blinkTask(void *pvParameters)
   */
 int main(void)
 {
+  int error = 0;
   HAL_Init();
   SystemClock_Config();
   MX_GPIO_Init();
   MX_USART1_UART_Init();
 
-  xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);
+  //USART1_SendString(INIT_MSG);
+
+  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);
+  if (error <= 0) {
+    while(1);
+  }
 
   vTaskStartScheduler();
 }

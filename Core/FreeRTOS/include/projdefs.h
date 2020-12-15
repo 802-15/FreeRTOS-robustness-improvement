@@ -116,5 +116,12 @@ typedef void (* TaskFunction_t)( void * );
 #define pdLITTLE_ENDIAN                   pdFREERTOS_LITTLE_ENDIAN
 #define pdBIG_ENDIAN                      pdFREERTOS_BIG_ENDIAN
 
+/* Define status values for temporal software redundancy evaluation */
+#if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+    #define pdFREERTOS_INSTANCE_WAITING     ( ( BaseType_t ) 0 )
+    #define pdFREERTOS_INSTANCE_RUNNING     ( ( BaseType_t ) 1 )
+    #define pdFREERTOS_INSTANCE_DONE        ( ( BaseType_t ) 2 )
+    #define pdFREERTOS_INSTANCE_FAILED      ( ( BaseType_t ) 3 )
+#endif /* configUSE_TEMPORAL_REDUNDANCY */
 
 #endif /* PROJDEFS_H */

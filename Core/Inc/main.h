@@ -63,6 +63,13 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN Private defines */
 
+/* Initial message */
+#define INIT_MSG \
+    "\r\n" \
+    "Application: Time redundant blinky \r\n" \
+    "Built:" __DATE__ " " __TIME__ "\r\n" \
+    "\n"
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

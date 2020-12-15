@@ -327,6 +327,20 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
     #if ( configUSE_POSIX_ERRNO == 1 )
         int iTaskErrno;
     #endif
+
+    /* Store information on the instance in a temporal redundancy scenario
+     * with two task instances. Every instance should be able to point
+     * to the other one's handle (TCB).
+     * Instance state and execution count are also tracked.
+     */
+    #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+        UBaseType_t uxInstanceState;        /*< Set to the current instance state (see projdefs.h) */
+        UBaseType_t uxExecCount;            /*< Stores the number of executions. */
+        UBaseType_t uxExecResult;           /*< Stores arbitrary number representing execution result. */
+        UBaseType_t uxRedundantTask;        /*< Check if this TCB belongs to a redundant task */
+        TaskHandle_t * pxOtherInstance;     /*< Pointer to other instance of the same task */
+        void ( * pvFailureHandle) (void);   /*< The task failure function pointer is stored in both instance TCBs*/
+    #endif
 } tskTCB;
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
@@ -721,7 +735,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 #endif /* portUSING_MPU_WRAPPERS */
 /*-----------------------------------------------------------*/
 
-#if ( configSUPPORT_DYNAMIC_ALLOCATION == 1 )
+#if ( ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 0 ) )
 
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
                             const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
@@ -811,7 +825,167 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         return xReturn;
     }
 
-#endif /* configSUPPORT_DYNAMIC_ALLOCATION */
+#endif /* configSUPPORT_DYNAMIC_ALLOCATION && !configUSE_TEMPORAL_REDUNDANCY */
+/*-----------------------------------------------------------*/
+
+#if ( ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 1 ) )
+
+    BaseType_t xTaskCreateInstance( TaskFunction_t pxTaskCode,
+                                    const char * const pcName,
+                                    const configSTACK_DEPTH_TYPE usStackDepth,
+                                    void * const pvParameters,
+                                    UBaseType_t uxPriority,
+                                    TaskHandle_t * const pxCreatedTask )
+    {
+        TCB_t * pxNewTCB;
+        BaseType_t xReturn;
+
+        /* If the stack grows down then allocate the stack then the TCB so the stack
+         * does not grow into the TCB.  Likewise if the stack grows up then allocate
+         * the TCB then the stack. */
+        #if ( portSTACK_GROWTH > 0 )
+            {
+                /* Allocate space for the TCB.  Where the memory comes from depends on
+                 * the implementation of the port malloc function and whether or not static
+                 * allocation is being used. */
+                pxNewTCB = ( TCB_t * ) pvPortMalloc( sizeof( TCB_t ) );
+
+                if( pxNewTCB != NULL )
+                {
+                    /* Allocate space for the stack used by the task being created.
+                     * The base of the stack memory stored in the TCB so the task can
+                     * be deleted later if required. */
+                    pxNewTCB->pxStack = ( StackType_t * ) pvPortMalloc( ( ( ( size_t ) usStackDepth ) * sizeof( StackType_t ) ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
+
+                    if( pxNewTCB->pxStack == NULL )
+                    {
+                        /* Could not allocate the stack.  Delete the allocated TCB. */
+                        vPortFree( pxNewTCB );
+                        pxNewTCB = NULL;
+                    }
+                }
+            }
+        #else /* portSTACK_GROWTH */
+            {
+                StackType_t * pxStack;
+
+                /* Allocate space for the stack used by the task being created. */
+                pxStack = pvPortMalloc( ( ( ( size_t ) usStackDepth ) * sizeof( StackType_t ) ) ); /*lint !e9079 All values returned by pvPortMalloc() have at least the alignment required by the MCU's stack and this allocation is the stack. */
+
+                if( pxStack != NULL )
+                {
+                    /* Allocate space for the TCB. */
+                    pxNewTCB = ( TCB_t * ) pvPortMalloc( sizeof( TCB_t ) ); /*lint !e9087 !e9079 All values returned by pvPortMalloc() have at least the alignment required by the MCU's stack, and the first member of TCB_t is always a pointer to the task's stack. */
+
+                    if( pxNewTCB != NULL )
+                    {
+                        /* Store the stack location in the TCB. */
+                        pxNewTCB->pxStack = pxStack;
+                    }
+                    else
+                    {
+                        /* The stack cannot be used as the TCB was not created.  Free
+                         * it again. */
+                        vPortFree( pxStack );
+                    }
+                }
+                else
+                {
+                    pxNewTCB = NULL;
+                }
+            }
+        #endif /* portSTACK_GROWTH */
+
+        if( pxNewTCB != NULL )
+        {
+            #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 ) /*lint !e9029 !e731 Macro has been consolidated for readability reasons. */
+                {
+                    /* Tasks can be created statically or dynamically, so note this
+                     * task was created dynamically in case it is later deleted. */
+                    pxNewTCB->ucStaticallyAllocated = tskDYNAMICALLY_ALLOCATED_STACK_AND_TCB;
+                }
+            #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
+
+            prvInitialiseNewTask( pxTaskCode, pcName, ( uint32_t ) usStackDepth, pvParameters, uxPriority, pxCreatedTask, pxNewTCB, NULL );
+            prvAddNewTaskToReadyList( pxNewTCB );
+            xReturn = pdPASS;
+        }
+        else
+        {
+            xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
+        }
+
+        return xReturn;
+    }
+
+    BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
+                            const char * const pcName,
+                            const configSTACK_DEPTH_TYPE usStackDepth,
+                            void * const pvParameters,
+                            UBaseType_t uxPriority,
+                            TaskHandle_t * pxCreatedTask )
+    {
+        /* Create a redundant FreeRTOS task by making it execute twice.
+         * Two identical task instances are created at the same time, but only
+         * one can execute at any given time. FreeRTOS developer must
+         * explicitly denote that a task has finished one of its iterations by
+         * calling the function xTaskInstanceDone. */
+        BaseType_t xReturn = pdFAIL;
+        TCB_t *pxTCB1, *pxTCB2;
+        TaskHandle_t * handle1 = NULL;
+        TaskHandle_t * handle2 = NULL;
+
+        /* Critical section will prevent both instances from executing until we are finished  */
+        taskENTER_CRITICAL();
+
+        handle1 = pvPortMalloc(sizeof(TaskHandle_t));
+        handle2 = pvPortMalloc(sizeof(TaskHandle_t));
+        if (!handle1 || !handle2) {
+            vPortFree(handle1);
+            vPortFree(handle2);
+            taskEXIT_CRITICAL();
+            return pdFAIL;
+        }
+
+        /* Task creation results must be checked for failure */
+        if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle1 ) == pdPASS )
+        {
+
+            /* Set first instance as active */
+            pxTCB1 = prvGetTCBFromHandle( * handle1 );
+            pxTCB1->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
+            pxTCB1->uxRedundantTask = pdTRUE;
+
+            if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle2 ) == pdPASS )
+            {
+
+                /* Suspend second task instance */
+                pxTCB2 = prvGetTCBFromHandle( * handle2 );
+                pxTCB2->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
+                pxTCB2->uxRedundantTask = pdTRUE;
+                vTaskSuspend( * handle2  );
+
+                xReturn = pdTRUE;
+
+                /* Connect the instances via handle pointers */
+                pxTCB1->pxOtherInstance = handle2;
+                pxTCB2->pxOtherInstance = handle1;
+
+                /* Return the first instance handle */
+                pxCreatedTask = handle1;
+
+            }
+            else
+            {
+                /* Delete the first task if the seconds fails to be created */
+                vTaskDelete( * handle1);
+            }
+        }
+        taskEXIT_CRITICAL();
+        return xReturn;
+    }
+
+#endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
 /*-----------------------------------------------------------*/
 
 static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
@@ -1000,6 +1174,17 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
         }
     #endif
 
+    #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+        {
+            pxNewTCB->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
+            pxNewTCB->uxExecCount = 0;
+            pxNewTCB->uxExecResult = 0;
+            pxNewTCB->uxRedundantTask = pdFALSE;
+            pxNewTCB->pxOtherInstance = NULL;
+            pxNewTCB->pvFailureHandle = NULL;
+        }
+    #endif
+
     /* Initialize the TCB stack to look as if the task was already running,
      * but had been interrupted by the scheduler.  The return address is set
      * to the start of the task function. Once the stack has been initialised
@@ -1147,6 +1332,163 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         mtCOVERAGE_TEST_MARKER();
     }
 }
+/*-----------------------------------------------------------*/
+#if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+
+    void vTaskRegisterFailureHandle ( TaskHandle_t TaskHandle,
+                                      void ( * pvFailureFunc ) (void) )
+    {
+        /* Store pointer to redundant task failure function.
+           This function should perform some sort of error handling specified
+           by the FreeRTOS user.
+         */
+        TCB_t * pxCurrentInstanceTCB;
+        TCB_t * pxOtherInstanceTCB;
+
+        taskENTER_CRITICAL();
+
+        pxCurrentInstanceTCB = prvGetTCBFromHandle( TaskHandle );
+        pxCurrentInstanceTCB->pvFailureHandle = pvFailureFunc;
+
+        pxOtherInstanceTCB = prvGetTCBFromHandle( * pxCurrentInstanceTCB->pxOtherInstance);
+        pxOtherInstanceTCB->pvFailureHandle = pvFailureFunc;
+
+        taskEXIT_CRITICAL();
+    }
+
+    void vTaskRedundantResume( TaskHandle_t xTaskToResume )
+    {
+        /* This function is meant to be called from the error callback function
+         * if temporal redundancy has failed. It will resume the task instances
+         * in the normal order - one instance ready and one suspended  */
+        TCB_t *pxTCB1, *pxTCB2;
+
+        taskENTER_CRITICAL();
+
+        pxTCB1 = prvGetTCBFromHandle( xTaskToResume );
+        pxTCB2 = prvGetTCBFromHandle( * xTaskToResume->pxOtherInstance );
+
+        pxTCB1->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
+        pxTCB2->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
+
+        if ( pxTCB1->uxExecCount != pxTCB2->uxExecCount ) {
+            pxTCB1->uxExecCount = 0;
+            pxTCB2->uxExecCount = 0;
+        }
+
+        vTaskResume( xTaskToResume );
+        vTaskSuspend( * xTaskToResume->pxOtherInstance );
+
+        taskEXIT_CRITICAL();
+    }
+
+BaseType_t xTaskInstanceDone( TaskHandle_t taskHandle,
+                              UBaseType_t uxExecResult,
+                              const TickType_t uxDelayTime )
+    {
+        /* This function must be called after one instance of the task has been
+         * finished. It depends on the task, but usually it replaces the delay.
+         * The FreeRTOS user must evaluate the appropriate place inside
+         * a task to call this function. Once called the function will run the next
+         * instance or evaluate the overall status of the task based on instance return
+         * values. The optional behaviour can be specified through the uxDelayTime parameter
+         * or if the callback function was set using vSetTaskFailureCallback.
+         *
+         * It is important to denote that this function must also be called on the place
+         * of failure of our task, with a possible delay and additional cleanup functions.
+         *
+         * The return value of this function can be used as a result of the overall
+         * arbitration procedure.
+         */
+        BaseType_t xReturn = pdFAIL;
+        TCB_t * firstTCB, * secondTCB;
+
+        taskENTER_CRITICAL();
+
+        /* Obtain both TCBs from one handle */
+        firstTCB = prvGetTCBFromHandle( taskHandle );
+        secondTCB = prvGetTCBFromHandle( * firstTCB->pxOtherInstance );
+
+        /* This task won't proceed with failed tasks unless unblocked using vTaskRedundantResume */
+        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_FAILED ) || ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_FAILED ) )
+        {
+            return pdFAIL;
+        }
+
+        /* If both instances are not done swap the active status between them */
+        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_RUNNING ) && ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_WAITING ) )
+        {
+            /* Start executing the second instance */
+            firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
+            firstTCB->uxExecResult = uxExecResult;
+            firstTCB->uxExecCount++;
+
+            secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
+
+            vTaskResume( * firstTCB->pxOtherInstance );
+            vTaskSuspend( * secondTCB->pxOtherInstance );
+
+            taskEXIT_CRITICAL();
+
+            /* Run optional user delay */
+            if( uxDelayTime != 0 )
+            {
+                vTaskDelay( uxDelayTime );
+            }
+            return pdFREERTOS_INSTANCE_DONE;
+        }
+
+        /* Both instances are done  */
+        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) && ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_RUNNING ) )
+        {
+            secondTCB->uxExecCount++;
+            secondTCB->uxExecResult = uxExecResult;
+            secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
+
+            /* Check the TCB storage values */
+            if ( ( firstTCB->uxExecResult == secondTCB->uxExecResult ) && ( firstTCB->uxExecCount == secondTCB->uxExecCount ) )
+            {
+
+                /* Start re-executing one of tasks */
+                firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
+                secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
+
+                vTaskSuspend( * firstTCB->pxOtherInstance );
+                vTaskResume( * secondTCB->pxOtherInstance );
+
+                taskEXIT_CRITICAL();
+
+                /* Run optional user delay */
+                if( uxDelayTime != 0 )
+                {
+                    vTaskDelay( uxDelayTime );
+                }
+            }
+            else
+            {
+                /* If the tasks have not returned the same value or do not have
+                 * the same number of execution counts then we have failed */
+                xReturn = pdFALSE;
+                /* Suspend both tasks and run the faliure callback function if
+                 * it is provided */
+
+                firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
+                secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
+
+                vTaskSuspend( * firstTCB->pxOtherInstance );
+                vTaskSuspend( * secondTCB->pxOtherInstance );
+
+                /* Handle errors before resuming */
+                if ( firstTCB->pvFailureHandle != NULL ) {
+                        firstTCB->pvFailureHandle();
+                }
+
+                taskEXIT_CRITICAL();
+            }
+        }
+        return xReturn;
+    }
+#endif /* configUSE_TEMPORAL_REDUNDANCY */
 /*-----------------------------------------------------------*/
 
 #if ( INCLUDE_vTaskDelete == 1 )
@@ -2018,12 +2360,22 @@ void vTaskStartScheduler( void )
     #else /* if ( configSUPPORT_STATIC_ALLOCATION == 1 ) */
         {
             /* The Idle task is being created using dynamically allocated RAM. */
-            xReturn = xTaskCreate( prvIdleTask,
-                                   configIDLE_TASK_NAME,
-                                   configMINIMAL_STACK_SIZE,
-                                   ( void * ) NULL,
-                                   portPRIVILEGE_BIT,  /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
-                                   &xIdleTaskHandle ); /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
+            #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+                /* Create a single instance for idle task */
+                xReturn = xTaskCreateInstance( prvIdleTask,
+                                    configIDLE_TASK_NAME,
+                                    configMINIMAL_STACK_SIZE,
+                                    ( void * ) NULL,
+                                    portPRIVILEGE_BIT,  /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
+                                    &xIdleTaskHandle ); /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
+            #else
+                xReturn = xTaskCreate( prvIdleTask,
+                                    configIDLE_TASK_NAME,
+                                    configMINIMAL_STACK_SIZE,
+                                    ( void * ) NULL,
+                                    portPRIVILEGE_BIT,  /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
+                                    &xIdleTaskHandle ); /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
+            #endif /* configUSE_TEMPORAL_REDUNDANCY */
         }
     #endif /* configSUPPORT_STATIC_ALLOCATION */
 
