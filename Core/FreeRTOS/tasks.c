@@ -923,7 +923,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                             const configSTACK_DEPTH_TYPE usStackDepth,
                             void * const pvParameters,
                             UBaseType_t uxPriority,
-                            TaskHandle_t * pxCreatedTask )
+                            TaskHandle_t * const pxCreatedTask )
     {
         /* Create a redundant FreeRTOS task by making it execute twice.
          * Two identical task instances are created at the same time, but only
@@ -932,27 +932,25 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
          * calling the function xTaskInstanceDone. */
         BaseType_t xReturn = pdFAIL;
         TCB_t *pxTCB1, *pxTCB2;
-        TaskHandle_t * handle1 = NULL;
         TaskHandle_t * handle2 = NULL;
 
         /* Critical section will prevent both instances from executing until we are finished  */
         taskENTER_CRITICAL();
 
-        handle1 = pvPortMalloc(sizeof(TaskHandle_t));
+        /* The second instance handle is dynamically allocated */
         handle2 = pvPortMalloc(sizeof(TaskHandle_t));
-        if (!handle1 || !handle2) {
-            vPortFree(handle1);
+        if (!handle2) {
             vPortFree(handle2);
             taskEXIT_CRITICAL();
             return pdFAIL;
         }
 
         /* Task creation results must be checked for failure */
-        if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle1 ) == pdPASS )
+        if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask ) == pdPASS )
         {
 
             /* Set first instance as active */
-            pxTCB1 = prvGetTCBFromHandle( * handle1 );
+            pxTCB1 = prvGetTCBFromHandle( * pxCreatedTask );
             pxTCB1->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
             pxTCB1->uxRedundantTask = pdTRUE;
 
@@ -969,16 +967,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
                 /* Connect the instances via handle pointers */
                 pxTCB1->pxOtherInstance = handle2;
-                pxTCB2->pxOtherInstance = handle1;
-
-                /* Return the first instance handle */
-                pxCreatedTask = handle1;
+                pxTCB2->pxOtherInstance = pxCreatedTask;
 
             }
             else
             {
                 /* Delete the first task if the seconds fails to be created */
-                vTaskDelete( * handle1);
+                vTaskDelete( * pxCreatedTask );
+                vPortFree( * handle2 );
             }
         }
         taskEXIT_CRITICAL();

@@ -357,7 +357,9 @@ typedef enum
  *                                 UBaseType_t uxPriority,
  *                                 TaskHandle_t *pvCreatedTask);
  * </pre>
- * This function is used to create a single non-redundant task instance for private FreeRTOS tasks (e.g. software timer)
+ * This function is used to create a single non-redundant task instance for
+ * private FreeRTOS tasks (e.g. software timer, idle task). These tasks are meant
+ * to be run with a single instance.
  */
     BaseType_t xTaskCreateInstance( TaskFunction_t pxTaskCode,
                                     const char * const pcName,

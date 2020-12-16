@@ -66,7 +66,7 @@ static void blinkTask(void *pvParameters)
 
   while (1) {
 
-    USART1_SendString("Hello world!\r\n");
+    //USART1_SendString("Hello world!\r\n");
 
     gpio_led_state(LED3_ORANGE_ID, 1);
     gpio_led_state(LED4_GREEN_ID, 1);
@@ -78,7 +78,7 @@ static void blinkTask(void *pvParameters)
     gpio_led_state(LED4_GREEN_ID, 0);
     gpio_led_state(LED5_RED_ID, 1);
     gpio_led_state(LED6_BLUE_ID, 1);
-    vTaskDelay(xDelay);
+    xTaskInstanceDone(blinkyHandle, 0, xDelay);
   }
 }
 
