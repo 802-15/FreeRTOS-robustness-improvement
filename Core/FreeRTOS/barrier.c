@@ -1,0 +1,106 @@
+/*
+ * FreeRTOS Kernel V10.4.2
+ * Copyright © 2020, Mario Senecic
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * https://github.com/802-15/FreeRTOS-robustness-improvement
+ *
+ */
+
+
+/* Standard includes. */
+#include <stdlib.h>
+
+/* FreeRTOS includes. */
+#include "FreeRTOS.h"
+#include "FreeRTOSConfig.h"
+#include "barrier.h"
+#include "task.h"
+#include "semphr.h"
+
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
+{
+    barrierHandle_t * pxBarrierHandle = NULL;
+
+    pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) );
+    if ( !pxBarrierHandle )
+        goto error_out;
+
+    pxBarrierHandle->uxArriveCounter = 0;
+    pxBarrierHandle->uxLeaveCounter = configTIME_REDUNDANT_INSTANCES;
+    pxBarrierHandle->uxFlag = pdTRUE;
+
+    pxBarrierHandle->xCounterMutex = xSemaphoreCreateMutex();
+    if ( !pxBarrierHandle->xCounterMutex )
+        goto error_out;
+
+    pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateMutex();
+    if ( !pxBarrierHandle->xBarrierSemaphore )
+        goto error_out;
+
+    *pxTaskBarrierHandle = pxBarrierHandle;
+    return pdPASS;
+
+error_out:
+    /* vSemaphoreDelete calls vPortFree eventually */
+    vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
+    vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
+    vPortFree( pxBarrierHandle );
+    return pdFREERTOS_ERRNO_ENOMEM;
+}
+
+void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
+{
+    if (!pxBarrierHandle)
+        return;
+
+    if( xSemaphoreTake( pxBarrierHandle->xCounterMutex, portMAX_DELAY ) )
+    {
+        pxBarrierHandle->uxArriveCounter++;
+        pxBarrierHandle->uxFlag = pdTRUE;
+        xSemaphoreGive( pxBarrierHandle->xCounterMutex );
+
+        /* First thread will take the semaphore to block other threads */
+        if ( pxBarrierHandle->uxArriveCounter == 1 )
+            xSemaphoreTake( pxBarrierHandle->xBarrierSemaphore, portMAX_DELAY );
+    }
+
+    if ( pxBarrierHandle->uxArriveCounter == pxBarrierHandle->uxLeaveCounter )
+    {
+        /* Signal the barrier waiting semaphore if all threads are here */
+        pxBarrierHandle->uxArriveCounter--;
+        xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
+    }
+    else
+    {
+        /* All the threads that have entered the barrier wait here */
+        xSemaphoreTake( pxBarrierHandle->xBarrierSemaphore, portMAX_DELAY );
+        pxBarrierHandle->uxArriveCounter--;
+
+        /* Threads will exit one by one */
+        xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
+    }
+    /* End of barrier */
+}

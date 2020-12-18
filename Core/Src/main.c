@@ -78,7 +78,8 @@ static void blinkTask(void *pvParameters)
     gpio_led_state(LED4_GREEN_ID, 0);
     gpio_led_state(LED5_RED_ID, 1);
     gpio_led_state(LED6_BLUE_ID, 1);
-    xTaskInstanceDone(blinkyHandle, 0, xDelay);
+    xTaskInstanceDone(0);
+    vTaskDelay(xDelay);
   }
 }
 

@@ -91,7 +91,9 @@ to exclude the API function. */
 #define INCLUDE_vTaskDelay				1
 
 /* Enable time redundancy: set up multiple task instances with xTaskCreate */
-#define configUSE_TEMPORAL_REDUNDANCY	1
+#define configUSE_TEMPORAL_REDUNDANCY		1
+/* Time out threshold */
+#define configINSTANCE_TIMEOUT_THRESHOLD	3
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS

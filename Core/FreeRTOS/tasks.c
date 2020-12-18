@@ -38,6 +38,7 @@
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
+#include "barrier.h"
 
 /* Lint e9021, e961 and e750 are suppressed as a MISRA exception justified
  * because the MPU ports require MPU_WRAPPERS_INCLUDED_FROM_API_FILE to be defined
@@ -245,6 +246,18 @@
     #define taskEVENT_LIST_ITEM_VALUE_IN_USE    0x80000000UL
 #endif
 
+#if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+    /*
+    * Redundant task control block. This structure is dynamically allocate on
+    * for each redudant task (set of task instances).
+    */
+    typedef struct redundantTaskControlBlock
+    {
+        barrierHandle_t * pxBarrierHandle;  /*< Barrier handle for the redundant task instance */
+        void ( * pvFailureHandle) (void);   /*< The task failure function pointer. */
+    } redundantTCB_t;
+#endif /* configUSE_TEMPORAL_REDUNDANCY */
+
 /*
  * Task control block.  A task control block (TCB) is allocated for each task,
  * and stores task state information, including a pointer to the task's context
@@ -328,18 +341,13 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         int iTaskErrno;
     #endif
 
-    /* Store information on the instance in a temporal redundancy scenario
-     * with two task instances. Every instance should be able to point
-     * to the other one's handle (TCB).
-     * Instance state and execution count are also tracked.
-     */
+    /* Store information on a single instance in a temporal redundancy scenario */
     #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
         UBaseType_t uxInstanceState;        /*< Set to the current instance state (see projdefs.h) */
         UBaseType_t uxExecCount;            /*< Stores the number of executions. */
         UBaseType_t uxExecResult;           /*< Stores arbitrary number representing execution result. */
-        UBaseType_t uxRedundantTask;        /*< Check if this TCB belongs to a redundant task */
+        redundantTCB_t * pxRedundantTask;   /*< Pointer to redundant task structure with global task information */
         TaskHandle_t * pxOtherInstance;     /*< Pointer to other instance of the same task */
-        void ( * pvFailureHandle) (void);   /*< The task failure function pointer is stored in both instance TCBs*/
     #endif
 } tskTCB;
 
@@ -931,52 +939,67 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
          * explicitly denote that a task has finished one of its iterations by
          * calling the function xTaskInstanceDone. */
         BaseType_t xReturn = pdFAIL;
-        TCB_t *pxTCB1, *pxTCB2;
+        TCB_t * pxTCB1 = NULL;
+        TCB_t * pxTCB2 = NULL;
         TaskHandle_t * handle2 = NULL;
+        redundantTCB_t * pxRedundantTask = NULL;
+        barrierHandle_t * pxBarrierHandle = NULL;
 
         /* Critical section will prevent both instances from executing until we are finished  */
         taskENTER_CRITICAL();
 
         /* The second instance handle is dynamically allocated */
-        handle2 = pvPortMalloc(sizeof(TaskHandle_t));
-        if (!handle2) {
-            vPortFree(handle2);
-            taskEXIT_CRITICAL();
-            return pdFAIL;
-        }
+        handle2 = pvPortMalloc( sizeof( TaskHandle_t ) );
+        if ( !handle2 )
+            goto error_out;
 
         /* Task creation results must be checked for failure */
         if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask ) == pdPASS )
         {
-
             /* Set first instance as active */
             pxTCB1 = prvGetTCBFromHandle( * pxCreatedTask );
-            pxTCB1->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
-            pxTCB1->uxRedundantTask = pdTRUE;
-
             if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle2 ) == pdPASS )
             {
-
                 /* Suspend second task instance */
                 pxTCB2 = prvGetTCBFromHandle( * handle2 );
-                pxTCB2->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
-                pxTCB2->uxRedundantTask = pdTRUE;
-                vTaskSuspend( * handle2  );
-
-                xReturn = pdTRUE;
 
                 /* Connect the instances via handle pointers */
                 pxTCB1->pxOtherInstance = handle2;
                 pxTCB2->pxOtherInstance = pxCreatedTask;
 
+                /* Redundant task handle */
+                pxRedundantTask = pvPortMalloc( sizeof( redundantTCB_t ) );
+                if ( !pxRedundantTask )
+                    goto error_out;
+
+                pxTCB1->pxRedundantTask = pxRedundantTask;
+                pxTCB2->pxRedundantTask = pxRedundantTask;
+
+                /* Initialize the barrier for task instance synchronization */
+                if ( xBarrierCreate( &pxBarrierHandle ) != pdPASS || !pxBarrierHandle )
+                    goto error_out;
+
+                pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
+
+                xReturn = pdTRUE;
             }
             else
             {
-                /* Delete the first task if the seconds fails to be created */
-                vTaskDelete( * pxCreatedTask );
-                vPortFree( * handle2 );
+                goto error_out;
             }
         }
+
+        goto out;
+
+error_out:
+        vTaskDelete( * pxCreatedTask );
+        vTaskDelete( * handle2 );
+        if (pxTCB1)
+            vPortFree( pxTCB1->pxRedundantTask );
+        vPortFree( * handle2 );
+
+out:
+        /* Start executing the instances simultaneously by enabling the interrupts */
         taskEXIT_CRITICAL();
         return xReturn;
     }
@@ -1172,12 +1195,11 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
 
     #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
         {
-            pxNewTCB->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
+            pxNewTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
             pxNewTCB->uxExecCount = 0;
             pxNewTCB->uxExecResult = 0;
-            pxNewTCB->uxRedundantTask = pdFALSE;
+            pxNewTCB->pxRedundantTask = NULL;
             pxNewTCB->pxOtherInstance = NULL;
-            pxNewTCB->pvFailureHandle = NULL;
         }
     #endif
 
@@ -1331,56 +1353,24 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 /*-----------------------------------------------------------*/
 #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
 
-    void vTaskRegisterFailureHandle ( TaskHandle_t TaskHandle,
-                                      void ( * pvFailureFunc ) (void) )
+    void vTaskRegisterFailureHandle( TaskHandle_t TaskHandle,
+                                     void ( * pvFailureFunc ) (void) )
     {
         /* Store pointer to redundant task failure function.
            This function should perform some sort of error handling specified
            by the FreeRTOS user.
          */
         TCB_t * pxCurrentInstanceTCB;
-        TCB_t * pxOtherInstanceTCB;
 
         taskENTER_CRITICAL();
 
         pxCurrentInstanceTCB = prvGetTCBFromHandle( TaskHandle );
-        pxCurrentInstanceTCB->pvFailureHandle = pvFailureFunc;
-
-        pxOtherInstanceTCB = prvGetTCBFromHandle( * pxCurrentInstanceTCB->pxOtherInstance);
-        pxOtherInstanceTCB->pvFailureHandle = pvFailureFunc;
+        pxCurrentInstanceTCB->pxRedundantTask->pvFailureHandle = pvFailureFunc;
 
         taskEXIT_CRITICAL();
     }
 
-    void vTaskRedundantResume( TaskHandle_t xTaskToResume )
-    {
-        /* This function is meant to be called from the error callback function
-         * if temporal redundancy has failed. It will resume the task instances
-         * in the normal order - one instance ready and one suspended  */
-        TCB_t *pxTCB1, *pxTCB2;
-
-        taskENTER_CRITICAL();
-
-        pxTCB1 = prvGetTCBFromHandle( xTaskToResume );
-        pxTCB2 = prvGetTCBFromHandle( * xTaskToResume->pxOtherInstance );
-
-        pxTCB1->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
-        pxTCB2->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
-
-        if ( pxTCB1->uxExecCount != pxTCB2->uxExecCount ) {
-            pxTCB1->uxExecCount = 0;
-            pxTCB2->uxExecCount = 0;
-        }
-
-        vTaskResume( xTaskToResume );
-        vTaskSuspend( * xTaskToResume->pxOtherInstance );
-
-        taskEXIT_CRITICAL();
-    }
-
-BaseType_t xTaskInstanceDone( TaskHandle_t taskHandle,
-                              UBaseType_t uxExecResult,
-                              const TickType_t uxDelayTime )
+    BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult )
     {
         /* This function must be called after one instance of the task has been
          * finished. It depends on the task, but usually it replaces the delay.
@@ -1397,91 +1387,45 @@ BaseType_t xTaskInstanceDone( TaskHandle_t taskHandle,
          * arbitration procedure.
          */
         BaseType_t xReturn = pdFAIL;
-        TCB_t * firstTCB, * secondTCB;
+        TaskHandle_t currentTaskInstance;
+        TCB_t * currentTCB;
+        TCB_t * otherTCB;
 
         taskENTER_CRITICAL();
 
-        /* Obtain both TCBs from one handle */
-        firstTCB = prvGetTCBFromHandle( taskHandle );
-        secondTCB = prvGetTCBFromHandle( * firstTCB->pxOtherInstance );
+        currentTaskInstance = xTaskGetCurrentTaskHandle();
+        currentTCB = prvGetTCBFromHandle( currentTaskInstance );
+        otherTCB = * currentTCB->pxOtherInstance;
 
-        /* This task won't proceed with failed tasks unless unblocked using vTaskRedundantResume */
-        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_FAILED ) || ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_FAILED ) )
+        currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
+        currentTCB->uxExecResult = uxExecResult;
+        currentTCB->uxExecCount++;
+
+        taskEXIT_CRITICAL();
+
+        /* Enter the barrier and wait until all threads are there */
+        vBarrierEnter( currentTCB->pxRedundantTask->pxBarrierHandle );
+
+        taskENTER_CRITICAL();
+
+        /* This segment is executed once the barrier has been opened */
+
+        if ( ( currentTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) && ( otherTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) ) 
         {
-            return pdFAIL;
-        }
-
-        /* If both instances are not done swap the active status between them */
-        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_RUNNING ) && ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_WAITING ) )
-        {
-            /* Start executing the second instance */
-            firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
-            firstTCB->uxExecResult = uxExecResult;
-            firstTCB->uxExecCount++;
-
-            secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
-
-            vTaskResume( * firstTCB->pxOtherInstance );
-            vTaskSuspend( * secondTCB->pxOtherInstance );
-
-            taskEXIT_CRITICAL();
-
-            /* Run optional user delay */
-            if( uxDelayTime != 0 )
+            if ( ( currentTCB->uxExecResult == otherTCB->uxExecResult ) )
             {
-                vTaskDelay( uxDelayTime );
-            }
-            return pdFREERTOS_INSTANCE_DONE;
-        }
-
-        /* Both instances are done  */
-        if ( ( firstTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) && ( secondTCB->uxInstanceState == pdFREERTOS_INSTANCE_RUNNING ) )
-        {
-            secondTCB->uxExecCount++;
-            secondTCB->uxExecResult = uxExecResult;
-            secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
-
-            /* Check the TCB storage values */
-            if ( ( firstTCB->uxExecResult == secondTCB->uxExecResult ) && ( firstTCB->uxExecCount == secondTCB->uxExecCount ) )
-            {
-
-                /* Start re-executing one of tasks */
-                firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
-                secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_WAITING;
-
-                vTaskSuspend( * firstTCB->pxOtherInstance );
-                vTaskResume( * secondTCB->pxOtherInstance );
-
-                taskEXIT_CRITICAL();
-
-                /* Run optional user delay */
-                if( uxDelayTime != 0 )
-                {
-                    vTaskDelay( uxDelayTime );
-                }
-            }
-            else
-            {
-                /* If the tasks have not returned the same value or do not have
-                 * the same number of execution counts then we have failed */
-                xReturn = pdFALSE;
-                /* Suspend both tasks and run the faliure callback function if
-                 * it is provided */
-
-                firstTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
-                secondTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
-
-                vTaskSuspend( * firstTCB->pxOtherInstance );
-                vTaskSuspend( * secondTCB->pxOtherInstance );
-
-                /* Handle errors before resuming */
-                if ( firstTCB->pvFailureHandle != NULL ) {
-                        firstTCB->pvFailureHandle();
-                }
-
-                taskEXIT_CRITICAL();
+                xReturn = pdPASS;
             }
         }
+        else
+        {
+            /* At least one of the instances has failed, run failure handle if registered */
+            if ( currentTCB->pxRedundantTask->pvFailureHandle )
+                currentTCB->pxRedundantTask->pvFailureHandle();
+        }
+
+        taskEXIT_CRITICAL();
+
         return xReturn;
     }
 #endif /* configUSE_TEMPORAL_REDUNDANCY */

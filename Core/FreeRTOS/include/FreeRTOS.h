@@ -256,8 +256,18 @@
     #define configUSE_TEMPORAL_REDUNDANCY 0
 #endif
 
-/* Additional criteria must be met for using temporal redundancy */
 #if configUSE_TEMPORAL_REDUNDANCY == 1
+
+    /* Set up default values for number of instances and the timeout threshold */
+    #ifndef configINSTANCE_TIMEOUT_THRESHOLD
+        #define configINSTANCE_TIMEOUT_THRESHOLD 3
+    #endif
+
+    #ifndef configTIME_REDUNDANT_INSTANCES
+        #define configTIME_REDUNDANT_INSTANCES 2
+    #endif
+
+    /* Additional criteria must be met for using temporal redundancy */
     #if configSUPPORT_DYNAMIC_ALLOCATION == 0
         #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configSUPPORT_DYNAMIC_ALLOCATION == 1 must also be set.
     #endif
