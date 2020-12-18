@@ -38,8 +38,8 @@
 typedef struct barrierHandle
 {
     UBaseType_t uxArriveCounter;            /*< Count of threads that have entered the barrier */
-    UBaseType_t uxLeaveCounter;             /*< Count of threads that have exited the barrier */
-    UBaseType_t uxFlag;                     /*< Barrier active flag (determines if it will pass threads) */
+    UBaseType_t uxLeaveCounter;             /*< Total count of threads that can enter this barrier */
+    UBaseType_t uxFlag;                     /*< Barrier active flag (used to check barrier status) */
 
     SemaphoreHandle_t xCounterMutex;        /*< Barrier counter protection mutex */
     SemaphoreHandle_t xBarrierSemaphore;    /*< Barrier waiting semaphore mutex */
@@ -50,13 +50,15 @@ typedef struct barrierHandle
  * <pre>
  * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle );
  * </pre>
- * Create a barrier instance for task instance synchronization.
+ * Create a barrier for task instances synchronization. The barrier
+ * instance consits of a mutex, counting semaphore, state variable and two
+ * counter variables.
  *
  * @param pxTaskBarrierHandle Used to pass back a handle by which the barrier
  * information can be accessed.
  *
- * @return pdPASS if the task was successfully created and added to a ready
- * list, otherwise an error code defined in the file projdefs.h
+ * @return pdPASS if the barrier was successfully created and added to the
+ * redundant task TCB, otherwise an error code defined in the file projdefs.h
  *
  */
 BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle );
@@ -64,15 +66,37 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle );
 /**
  * barrier. h
  * <pre>
- * void vBarrierEnter( barrierHandle_t * pxBarrierHandle,
- *                     TaskHandle_t * pxTaskInstance );
+ * void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
  * </pre>
- * Simple barrier synchronization using existing FreeRTOS objects.
+ * Simple barrier synchronization using existing FreeRTOS objects. Once a thread
+ * calls this function it will not resume execution until other threads have
+ * called it too. The threads will exit the barrier one by one, in a turnstyle
+ * manner. This implementation is taken from the "Little book of semaphores",
+ * page 29, second edition, document version 2.2.1.
  *
- * @param pxBarrierHandle Used to pass back a handle by which the barrier
- * information can be accessed.
+ * This function must be called outside of critical sections.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information related
+ * to the barrier.
  *
  */
 void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
+
+/**
+ * barrier. h
+ * <pre>
+ * BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
+ * </pre>
+ * Destroy the barrier instance by deleting the semaphores and freeing
+ * the barrier structure.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ * @return pdPASS if the barrier was destroyed, otherwise an error code
+ * defined in the file projdefs.h
+ *
+ */
+BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
 
 #endif /* INC_BARRIER_H */

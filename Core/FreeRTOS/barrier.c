@@ -46,17 +46,20 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
 
     pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) );
     if ( !pxBarrierHandle )
-        goto error_out;
+        return pdFREERTOS_ERRNO_ENOMEM;
 
     pxBarrierHandle->uxArriveCounter = 0;
     pxBarrierHandle->uxLeaveCounter = configTIME_REDUNDANT_INSTANCES;
     pxBarrierHandle->uxFlag = pdTRUE;
+    pxBarrierHandle->xCounterMutex = NULL;
+    pxBarrierHandle->xBarrierSemaphore = NULL;
 
     pxBarrierHandle->xCounterMutex = xSemaphoreCreateMutex();
     if ( !pxBarrierHandle->xCounterMutex )
         goto error_out;
 
-    pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateMutex();
+    /* The semaphore should be given/taken by threads one by one */
+    pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateCounting( 1, 0 );
     if ( !pxBarrierHandle->xBarrierSemaphore )
         goto error_out;
 
@@ -103,4 +106,22 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
         xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
     }
     /* End of barrier */
+}
+
+BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
+{
+    taskENTER_CRITICAL();
+
+    if ( uxSemaphoreGetCount( pxBarrierHandle->xCounterMutex ) || uxSemaphoreGetCount ( pxBarrierHandle->xBarrierSemaphore ) )
+        taskEXIT_CRITICAL();
+        return pdFREERTOS_ERRNO_EACCES;
+
+    vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
+    vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
+    vPortFree( pxBarrierHandle );
+
+    pxBarrierHandle = NULL;
+
+    taskEXIT_CRITICAL();
+    return pdPASS;
 }
