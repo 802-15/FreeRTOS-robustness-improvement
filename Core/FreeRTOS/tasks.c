@@ -253,8 +253,9 @@
     */
     typedef struct redundantTaskControlBlock
     {
-        barrierHandle_t * pxBarrierHandle;  /*< Barrier handle for the redundant task instance */
-        void ( * pvFailureHandle) (void);   /*< The task failure function pointer. */
+        UBaseType_t uxTaskState;                /*< Redundant task state (global) */
+        barrierHandle_t * pxBarrierHandle;      /*< Barrier handle for the redundant task instance */
+        void ( * pvFailureHandle ) ( void );    /*< The task failure function pointer. */
     } redundantTCB_t;
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
@@ -343,6 +344,7 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
 
     /* Store information on a single instance in a temporal redundancy scenario */
     #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+        UBaseType_t uxInstanceNum;          /*< Store this instance's number for reference inside the redundant task */
         UBaseType_t uxInstanceState;        /*< Set to the current instance state (see projdefs.h) */
         UBaseType_t uxExecCount;            /*< Stores the number of executions. */
         UBaseType_t uxExecResult;           /*< Stores arbitrary number representing execution result. */
@@ -956,11 +958,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         /* Task creation results must be checked for failure */
         if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask ) == pdPASS )
         {
-            /* Set first instance as active */
             pxTCB1 = prvGetTCBFromHandle( * pxCreatedTask );
+
             if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle2 ) == pdPASS )
             {
-                /* Suspend second task instance */
                 pxTCB2 = prvGetTCBFromHandle( * handle2 );
 
                 /* Connect the instances via handle pointers */
@@ -972,8 +973,15 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                 if ( !pxRedundantTask )
                     goto error_out;
 
+                pxRedundantTask->pvFailureHandle = NULL;
+                pxRedundantTask->pxBarrierHandle = NULL;
+                pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
+
                 pxTCB1->pxRedundantTask = pxRedundantTask;
                 pxTCB2->pxRedundantTask = pxRedundantTask;
+
+                pxTCB1->uxInstanceNum = 1;
+                pxTCB2->uxInstanceNum = 2;
 
                 /* Initialize the barrier for task instance synchronization */
                 if ( xBarrierCreate( &pxBarrierHandle ) != pdPASS || !pxBarrierHandle )
@@ -1195,6 +1203,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
 
     #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
         {
+            pxNewTCB->uxInstanceNum = 0;
             pxNewTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
             pxNewTCB->uxExecCount = 0;
             pxNewTCB->uxExecResult = 0;
@@ -1357,8 +1366,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                                      void ( * pvFailureFunc ) (void) )
     {
         /* Store pointer to redundant task failure function.
-           This function should perform some sort of error handling specified
-           by the FreeRTOS user.
+         * This function should perform some sort of error handling specified
+         * by the FreeRTOS user.
          */
         TCB_t * pxCurrentInstanceTCB;
 
@@ -1368,6 +1377,28 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         pxCurrentInstanceTCB->pxRedundantTask->pvFailureHandle = pvFailureFunc;
 
         taskEXIT_CRITICAL();
+    }
+
+    BaseType_t xTaskGetInstanceNumber( void )
+    {
+        /* Enables the user application to get information on the currently executing
+         * task instance by returning its number.
+         */
+        UBaseType_t currentInstanceNum = 0;
+        TaskHandle_t currentTaskInstance;
+        TCB_t * currentTCB;
+
+        taskENTER_CRITICAL();
+
+        currentTaskInstance = xTaskGetCurrentTaskHandle();
+        currentTCB = prvGetTCBFromHandle( currentTaskInstance );
+
+        if ( currentTCB->pxRedundantTask )
+            currentInstanceNum = currentTCB->uxInstanceNum;
+
+        taskEXIT_CRITICAL();
+
+        return currentInstanceNum;
     }
 
     BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult )
@@ -1393,6 +1424,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         taskENTER_CRITICAL();
 
+        /* Update the instance information */
         currentTaskInstance = xTaskGetCurrentTaskHandle();
         currentTCB = prvGetTCBFromHandle( currentTaskInstance );
         otherTCB = * currentTCB->pxOtherInstance;
@@ -1417,7 +1449,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 xReturn = pdPASS;
             }
         }
-        else
+
+        if ( !xReturn )
         {
             /* At least one of the instances has failed, run failure handle if registered */
             if ( currentTCB->pxRedundantTask->pvFailureHandle )

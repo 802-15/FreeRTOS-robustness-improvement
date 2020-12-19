@@ -379,9 +379,12 @@ typedef enum
  * After this function has been called the current redundant task instance will
  * be suspended using vTaskSuspend(), and the execution of the other instance
  * will start. If both instances are finished, the execution result and count
- * are evaluated. Optional faliure callbacks and delay time can also be specified.
+ * are evaluated.
  *
- * @param uxExecResult   This variable stores the task execution result for the current instance
+ * @param uxExecResult This variable stores the task execution result for the current instance
+ *
+ * @return Returns the result of execution validation across all the instances. This return
+ * value can be used to modify the future behaviour of the user application.
  * */
     BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
 
@@ -395,15 +398,32 @@ typedef enum
  * Register failure function for a redundant task.
  *
  * The function pointer must be supplied in the argument. The function itself should run
- * some kind of error handling defined by the user. After the function is done, a call should
- * be made to vTaskRedundantResume().
+ * some kind of error handling defined by the user.
+ *
  *
  * @param taskHandle Redundant task handle
  * @param pvFailureFunc Pointer to the failure function
  * */
     void vTaskRegisterFailureHandle( TaskHandle_t taskHandle,
                                      void ( *pvFailureFunc ) ( void ) );
-#endif
+
+/**
+ * task. h
+ * <pre>
+ * BaseType_t xTaskGetInstanceNumber( void );
+ * </pre>
+ *
+ * Return the instance number of the currently executing task. If the currently
+ * executing task is not a redundant one, it will return 0. Used to pass instance
+ * information back to the user application when needed. After returning this value
+ * the instance number can be safely placed on the instance's stack.
+ *
+ * @return Returns the current instance number, or 0 if it is called from a
+ * non-redundant task.
+ * */
+    BaseType_t xTaskGetInstanceNumber( void );
+
+#endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
 
 /**
  * task. h

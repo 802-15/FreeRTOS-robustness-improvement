@@ -59,27 +59,71 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void blinkyFailureTest(void)
+{
+  /* Dummy failure function that blinks the leds.
+     This function will only be executed by the first thread that exits the barrier! */
+  //const TickType_t xDelay = 400/portTICK_RATE_MS;
+  int blinkTimes = 10;
+  int i;
+
+  while(blinkTimes) {
+    gpio_led_state(LED3_ORANGE_ID, 1);
+    gpio_led_state(LED5_RED_ID, 1);
+    gpio_led_state(LED4_GREEN_ID, 1);
+    gpio_led_state(LED6_BLUE_ID, 1);
+
+    //vTaskDelay(xDelay);
+    for(i=0; i < 1000000; i++);
+
+    gpio_led_state(LED3_ORANGE_ID, 0);
+    gpio_led_state(LED5_RED_ID, 0);
+    gpio_led_state(LED4_GREEN_ID, 0);
+    gpio_led_state(LED6_BLUE_ID, 0);
+
+    //vTaskDelay(xDelay);
+    for(i=0; i < 1000000; i++);
+    blinkTimes--;
+  }
+}
+
 static void blinkTask(void *pvParameters)
 {
+  /* Time redundant blink task used to demonstrate the basic behaviour of
+   * a time redundant task running with two instances. Each instance will blink
+   * its own LEDs.
+   */
   (void) pvParameters;
   const TickType_t xDelay = 1000/portTICK_RATE_MS;
 
+  /* Get the running instance number and store it on the instance stack */
+  const BaseType_t instanceNumber = xTaskGetInstanceNumber();
+
   while (1) {
 
-    //USART1_SendString("Hello world!\r\n");
+    if ( instanceNumber % 2 == 0 ) {
+      gpio_led_state(LED3_ORANGE_ID, 1);
+      gpio_led_state(LED5_RED_ID, 0);
+     } else {
+      gpio_led_state(LED4_GREEN_ID, 1);
+      gpio_led_state(LED6_BLUE_ID, 0);
+    }
 
-    gpio_led_state(LED3_ORANGE_ID, 1);
-    gpio_led_state(LED4_GREEN_ID, 1);
-    gpio_led_state(LED5_RED_ID, 0);
-    gpio_led_state(LED6_BLUE_ID, 0);
     vTaskDelay(xDelay);
 
-    gpio_led_state(LED3_ORANGE_ID, 0);
-    gpio_led_state(LED4_GREEN_ID, 0);
-    gpio_led_state(LED5_RED_ID, 1);
-    gpio_led_state(LED6_BLUE_ID, 1);
-    xTaskInstanceDone(0);
+    if ( instanceNumber % 2 == 0 ) {
+      gpio_led_state(LED3_ORANGE_ID, 0);
+      gpio_led_state(LED5_RED_ID, 1);
+    } else {
+      gpio_led_state(LED4_GREEN_ID, 0);
+      gpio_led_state(LED6_BLUE_ID, 1);
+    }
+
     vTaskDelay(xDelay);
+
+    /* Task instance is finished, purposefully pass differing exit codes
+     * to trigger the failure handle. */
+    xTaskInstanceDone( instanceNumber );
   }
 }
 
@@ -97,12 +141,16 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
 
-  //USART1_SendString(INIT_MSG);
+  //USART1_SendString((char *) INIT_MSG);
 
+  /* Create a simple blinky demonstration task */
   error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);
   if (error <= 0) {
     while(1);
   }
+
+  /* Demonstration failure handle is registered */
+  vTaskRegisterFailureHandle( blinkyHandle, &blinkyFailureTest );
 
   vTaskStartScheduler();
 }
