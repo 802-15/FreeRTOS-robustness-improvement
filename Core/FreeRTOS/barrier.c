@@ -59,7 +59,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
         goto error_out;
 
     /* The semaphore should be given/taken by threads one by one */
-    pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateCounting( 1, 0 );
+    pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateCounting( 1, 1 );
     if ( !pxBarrierHandle->xBarrierSemaphore )
         goto error_out;
 
@@ -76,7 +76,7 @@ error_out:
 
 void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
 {
-    if (!pxBarrierHandle)
+    if ( !pxBarrierHandle )
         return;
 
     if( xSemaphoreTake( pxBarrierHandle->xCounterMutex, portMAX_DELAY ) )
@@ -85,9 +85,11 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
         pxBarrierHandle->uxFlag = pdTRUE;
         xSemaphoreGive( pxBarrierHandle->xCounterMutex );
 
-        /* First thread will take the semaphore to block other threads */
         if ( pxBarrierHandle->uxArriveCounter == 1 )
+        {
+            /* First thread will take the semaphore to block other threads */
             xSemaphoreTake( pxBarrierHandle->xBarrierSemaphore, portMAX_DELAY );
+        }
     }
 
     if ( pxBarrierHandle->uxArriveCounter == pxBarrierHandle->uxLeaveCounter )
@@ -112,7 +114,7 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 {
     taskENTER_CRITICAL();
 
-    if ( uxSemaphoreGetCount( pxBarrierHandle->xCounterMutex ) || uxSemaphoreGetCount ( pxBarrierHandle->xBarrierSemaphore ) )
+    if ( uxSemaphoreGetCount( pxBarrierHandle->xCounterMutex ) == 0 || uxSemaphoreGetCount ( pxBarrierHandle->xBarrierSemaphore ) == 0 )
         taskEXIT_CRITICAL();
         return pdFREERTOS_ERRNO_EACCES;
 
