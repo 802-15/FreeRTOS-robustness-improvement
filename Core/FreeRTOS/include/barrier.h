@@ -99,4 +99,18 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
  */
 BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
 
+/**
+ * barrier. h
+ * <pre>
+ * void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+ * </pre>
+ * Signal the barrier and release the waiting threads. This is done by
+ * giving the sempahore and setting the barrier flag to unused (pdFALSE) state.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ */
+void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+
 #endif /* INC_BARRIER_H */

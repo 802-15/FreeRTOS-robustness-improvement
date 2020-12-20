@@ -94,9 +94,8 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
 
     if ( pxBarrierHandle->uxArriveCounter == pxBarrierHandle->uxLeaveCounter )
     {
-        /* Signal the barrier waiting semaphore if all threads are here */
+        /* The last thread will leave the barrier and signal the rest of the threads externally */
         pxBarrierHandle->uxArriveCounter--;
-        xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
     }
     else
     {
@@ -108,6 +107,12 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
         xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
     }
     /* End of barrier */
+}
+
+void vBarrierSignal( barrierHandle_t * pxBarrierHandle )
+{
+    pxBarrierHandle->uxFlag = pdFALSE;
+    xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
 }
 
 BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )

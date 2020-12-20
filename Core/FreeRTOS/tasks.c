@@ -253,9 +253,10 @@
     */
     typedef struct redundantTaskControlBlock
     {
-        UBaseType_t uxTaskState;                /*< Redundant task state (global) */
-        barrierHandle_t * pxBarrierHandle;      /*< Barrier handle for the redundant task instance */
-        void ( * pvFailureHandle ) ( void );    /*< The task failure function pointer. */
+        UBaseType_t uxTaskState;                                    /*< Redundant task state (global) */
+        barrierHandle_t * pxBarrierHandle;                          /*< Barrier handle for the redundant task instance */
+        void ( * pvFailureHandle ) ( void );                        /*< The task failure function pointer. */
+        TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
     } redundantTCB_t;
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
@@ -349,7 +350,6 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         UBaseType_t uxExecCount;            /*< Stores the number of executions. */
         UBaseType_t uxExecResult;           /*< Stores arbitrary number representing execution result. */
         redundantTCB_t * pxRedundantTask;   /*< Pointer to redundant task structure with global task information */
-        TaskHandle_t * pxOtherInstance;     /*< Pointer to other instance of the same task */
     #endif
 } tskTCB;
 
@@ -941,73 +941,78 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
          * explicitly denote that a task has finished one of its iterations by
          * calling the function xTaskInstanceDone. */
         BaseType_t xReturn = pdFAIL;
-        TCB_t * pxTCB1 = NULL;
-        TCB_t * pxTCB2 = NULL;
-        TaskHandle_t * handle2 = NULL;
+        BaseType_t i = 0;
+        BaseType_t errorCode = pdFAIL;
+        TCB_t * pxTCB = NULL;
+        TaskHandle_t * handle = NULL;
         redundantTCB_t * pxRedundantTask = NULL;
         barrierHandle_t * pxBarrierHandle = NULL;
 
-        /* Critical section will prevent both instances from executing until we are finished  */
         taskENTER_CRITICAL();
 
-        /* The second instance handle is dynamically allocated */
-        handle2 = pvPortMalloc( sizeof( TaskHandle_t ) );
-        if ( !handle2 )
+        /* Redundant task handle */
+        pxRedundantTask = pvPortMalloc( sizeof( redundantTCB_t ) );
+        if ( !pxRedundantTask )
             goto error_out;
 
-        /* Task creation results must be checked for failure */
-        if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask ) == pdPASS )
+        pxRedundantTask->pvFailureHandle = NULL;
+        pxRedundantTask->pxBarrierHandle = NULL;
+        pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
+
+        /* Initialize the barrier for task instance synchronization */
+        if ( xBarrierCreate( &pxBarrierHandle ) != pdPASS || !pxBarrierHandle )
+            goto error_out;
+
+        pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
+
+        for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
         {
-            pxTCB1 = prvGetTCBFromHandle( * pxCreatedTask );
-
-            if ( xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle2 ) == pdPASS )
+            if ( i == 0 )
             {
-                pxTCB2 = prvGetTCBFromHandle( * handle2 );
-
-                /* Connect the instances via handle pointers */
-                pxTCB1->pxOtherInstance = handle2;
-                pxTCB2->pxOtherInstance = pxCreatedTask;
-
-                /* Redundant task handle */
-                pxRedundantTask = pvPortMalloc( sizeof( redundantTCB_t ) );
-                if ( !pxRedundantTask )
+                /* The first instance handle is statically allocated in the user application */
+                errorCode = xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask );
+                if ( errorCode != pdPASS )
                     goto error_out;
 
-                pxRedundantTask->pvFailureHandle = NULL;
-                pxRedundantTask->pxBarrierHandle = NULL;
-                pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
+                /* Connect the instances by storing the pointers to their TCBs */
+                pxRedundantTask->pxInstances[i] = pxCreatedTask;
 
-                pxTCB1->pxRedundantTask = pxRedundantTask;
-                pxTCB2->pxRedundantTask = pxRedundantTask;
-
-                pxTCB1->uxInstanceNum = 1;
-                pxTCB2->uxInstanceNum = 2;
-
-                /* Initialize the barrier for task instance synchronization */
-                if ( xBarrierCreate( &pxBarrierHandle ) != pdPASS || !pxBarrierHandle )
-                    goto error_out;
-
-                pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
-
-                xReturn = pdTRUE;
+                pxTCB = prvGetTCBFromHandle( * pxCreatedTask );
             }
             else
             {
-                goto error_out;
+                /* Other handles are allocated on the heap */
+                handle = pvPortMalloc( sizeof( TaskHandle_t ) );
+                if ( !handle )
+                    goto error_out;
+
+                errorCode = xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, handle );
+                if ( errorCode != pdPASS )
+                    goto error_out;
+
+                /* Connect the instances by storing the pointers to their TCBs */
+                pxRedundantTask->pxInstances[i] = handle;
+
+                pxTCB = prvGetTCBFromHandle( * handle );
             }
+            /* All instances can point to the redundant task structure */
+            pxTCB->pxRedundantTask = pxRedundantTask;
+            pxTCB->uxInstanceNum = i;
         }
 
+        xReturn = pdTRUE;
         goto out;
 
 error_out:
-        vTaskDelete( * pxCreatedTask );
-        vTaskDelete( * handle2 );
-        if (pxTCB1)
-            vPortFree( pxTCB1->pxRedundantTask );
-        vPortFree( * handle2 );
+        /* Clean up the resources */
+        xBarrierDestroy( pxBarrierHandle );
+        for( i = 1; pxRedundantTask->pxInstances[i] != NULL; i++ )
+        {
+            vTaskDelete( *pxRedundantTask->pxInstances[i] );
+        }
+        vPortFree( pxRedundantTask );
 
 out:
-        /* Start executing the instances simultaneously by enabling the interrupts */
         taskEXIT_CRITICAL();
         return xReturn;
     }
@@ -1208,7 +1213,6 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
             pxNewTCB->uxExecCount = 0;
             pxNewTCB->uxExecResult = 0;
             pxNewTCB->pxRedundantTask = NULL;
-            pxNewTCB->pxOtherInstance = NULL;
         }
     #endif
 
@@ -1417,37 +1421,58 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
          * The return value of this function can be used as a result of the overall
          * arbitration procedure.
          */
-        BaseType_t xReturn = pdFAIL;
+        BaseType_t xReturn = pdPASS;
+        BaseType_t i = 0;
         TaskHandle_t currentTaskInstance;
         TCB_t * currentTCB;
-        TCB_t * otherTCB;
+        TCB_t * iterTCB;
 
         taskENTER_CRITICAL();
 
         /* Update the instance information */
         currentTaskInstance = xTaskGetCurrentTaskHandle();
         currentTCB = prvGetTCBFromHandle( currentTaskInstance );
-        otherTCB = * currentTCB->pxOtherInstance;
 
-        currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
         currentTCB->uxExecResult = uxExecResult;
         currentTCB->uxExecCount++;
+
+        /* Instances returning pdPASS will be marked by 'done', otherwise they are treated as failed */
+        if ( currentTCB->uxExecResult == pdPASS ) {
+            currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
+        }
+        else
+        {
+            currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
+        }
 
         taskEXIT_CRITICAL();
 
         /* Enter the barrier and wait until all threads are there */
         vBarrierEnter( currentTCB->pxRedundantTask->pxBarrierHandle );
 
-        taskENTER_CRITICAL();
+        /* Only one thread executes the following code, other return */
+        if ( currentTCB->pxRedundantTask->pxBarrierHandle->uxFlag == pdFALSE )
+            return xReturn;
 
         /* This segment is executed once the barrier has been opened */
+        taskENTER_CRITICAL();
 
-        if ( ( currentTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) && ( otherTCB->uxInstanceState == pdFREERTOS_INSTANCE_DONE ) ) 
+        /* Evaluate the overall execution state of the task by checking if instance is in the 'DONE' state */
+        for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
         {
-            if ( ( currentTCB->uxExecResult == otherTCB->uxExecResult ) )
+            if ( i == 0 )
             {
-                xReturn = pdPASS;
+                iterTCB = prvGetTCBFromHandle( *pxCurrentTCB ->pxRedundantTask->pxInstances[i] );
             }
+            else
+            {
+                iterTCB = *pxCurrentTCB ->pxRedundantTask->pxInstances[i];
+            }
+            if ( iterTCB->uxInstanceState != pdFREERTOS_INSTANCE_DONE )
+                xReturn = pdFAIL;
+
+            /* Reset the instance states */
+            iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
         }
 
         if ( !xReturn )
@@ -1456,6 +1481,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             if ( currentTCB->pxRedundantTask->pvFailureHandle )
                 currentTCB->pxRedundantTask->pvFailureHandle();
         }
+
+        /* Release the remaning threads from the barrier */
+        vBarrierSignal( currentTCB->pxRedundantTask->pxBarrierHandle );
 
         taskEXIT_CRITICAL();
 

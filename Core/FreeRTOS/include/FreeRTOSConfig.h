@@ -92,6 +92,8 @@ to exclude the API function. */
 
 /* Enable time redundancy: set up multiple task instances with xTaskCreate */
 #define configUSE_TEMPORAL_REDUNDANCY		1
+/* Number of task instances to be created */
+#define configTIME_REDUNDANT_INSTANCES		3
 /* Time out threshold */
 #define configINSTANCE_TIMEOUT_THRESHOLD	3
 
