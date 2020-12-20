@@ -19,11 +19,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -35,10 +38,16 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+char messageBuffer[256];
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+
+#define SERIAL_PRINT(FORMAT,...) \
+snprintf ( messageBuffer, sizeof(messageBuffer), FORMAT "\r\n", ##__VA_ARGS__ ); \
+USART1_SendString(messageBuffer);
 
 /* USER CODE END PM */
 
@@ -136,12 +145,16 @@ static void blinkTask(void *pvParameters)
 int main(void)
 {
   int error = 0;
+
+  /* Start up the peripherals */
   HAL_Init();
   SystemClock_Config();
   MX_GPIO_Init();
+  MX_DMA_Init();
+  HAL_UART_MspInit(&huart1);
   MX_USART1_UART_Init();
 
-  //USART1_SendString((char *) INIT_MSG);
+  SERIAL_PRINT(INIT_MSG);
 
   /* Create a simple blinky demonstration task */
   error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);

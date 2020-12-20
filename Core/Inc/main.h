@@ -67,8 +67,7 @@ void Error_Handler(void);
 #define INIT_MSG \
     "\r\n" \
     "Application: Time redundant blinky \r\n" \
-    "Built:" __DATE__ " " __TIME__ "\r\n" \
-    "\n"
+    "Built:" __DATE__ " " __TIME__ "\r\n"
 
 /* USER CODE END Private defines */
 
