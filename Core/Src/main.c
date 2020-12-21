@@ -72,9 +72,8 @@ void blinkyFailureTest(void)
 {
   /* Dummy failure function that blinks the leds.
      This function will only be executed by the first thread that exits the barrier! */
-  //const TickType_t xDelay = 400/portTICK_RATE_MS;
+  const TickType_t xDelay = 200/portTICK_RATE_MS;
   int blinkTimes = 10;
-  int i;
 
   while(blinkTimes) {
     gpio_led_state(LED3_ORANGE_ID, 1);
@@ -82,16 +81,14 @@ void blinkyFailureTest(void)
     gpio_led_state(LED4_GREEN_ID, 1);
     gpio_led_state(LED6_BLUE_ID, 1);
 
-    //vTaskDelay(xDelay);
-    for(i=0; i < 1000000; i++);
+    vTaskDelay(xDelay);
 
     gpio_led_state(LED3_ORANGE_ID, 0);
     gpio_led_state(LED5_RED_ID, 0);
     gpio_led_state(LED4_GREEN_ID, 0);
     gpio_led_state(LED6_BLUE_ID, 0);
 
-    //vTaskDelay(xDelay);
-    for(i=0; i < 1000000; i++);
+    vTaskDelay(xDelay);
     blinkTimes--;
   }
 }
@@ -133,10 +130,10 @@ static void blinkTask(void *pvParameters)
     /* Task instance is finished, purposefully pass differing exit codes
      * to trigger the failure handle. */
     xTaskInstanceDone( instanceNumber );
+
+    vTaskDelete( blinkyHandle );
   }
 }
-
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -163,10 +160,12 @@ int main(void)
   }
 
   /* Demonstration failure handle is registered */
-  vTaskRegisterFailureHandle( blinkyHandle, &blinkyFailureTest );
+  vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
 
   vTaskStartScheduler();
 }
+
+/* USER CODE END 0 */
 
 /**
   * @brief System Clock Configuration

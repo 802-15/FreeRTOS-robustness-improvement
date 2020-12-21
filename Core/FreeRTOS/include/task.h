@@ -391,8 +391,8 @@ typedef enum
 /**
  * task. h
  * <pre>
- * void vTaskRegisterFailureHandle( TaskHandle_t taskHandle,
- *                                  void ( *pvFailureFunc ) ( void ) );
+ * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
+ *                                    void ( *pvFailureFunc ) ( void ) );
  * </pre>
  *
  * Register failure function for a redundant task.
@@ -404,8 +404,8 @@ typedef enum
  * @param taskHandle Redundant task handle
  * @param pvFailureFunc Pointer to the failure function
  * */
-    void vTaskRegisterFailureHandle( TaskHandle_t taskHandle,
-                                     void ( *pvFailureFunc ) ( void ) );
+    void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
+                                       void ( *pvFailureFunc ) ( void ) );
 
 /**
  * task. h

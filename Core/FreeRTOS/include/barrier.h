@@ -34,15 +34,25 @@
 #define INC_BARRIER_H
 
 #include "semphr.h"
+#include "timers.h"
+
+/* *INDENT-OFF* */
+#ifdef __cplusplus
+    extern "C" {
+#endif
+/* *INDENT-ON* */
 
 typedef struct barrierHandle
 {
     UBaseType_t uxArriveCounter;            /*< Count of threads that have entered the barrier */
     UBaseType_t uxLeaveCounter;             /*< Total count of threads that can enter this barrier */
     UBaseType_t uxFlag;                     /*< Barrier active flag (used to check barrier status) */
+    UBaseType_t uxTimerFlag;                /*< Barrier timer flag, set once the timer has been started */
 
     SemaphoreHandle_t xCounterMutex;        /*< Barrier counter protection mutex */
     SemaphoreHandle_t xBarrierSemaphore;    /*< Barrier waiting semaphore mutex */
+
+    TimerHandle_t xBarrierTimer;            /*< Barrier can time out if the instances take too long to complete */
 } barrierHandle_t;
 
 /**

@@ -38,7 +38,6 @@
 #include "FreeRTOSConfig.h"
 #include "barrier.h"
 #include "task.h"
-#include "semphr.h"
 
 BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
 {
@@ -50,9 +49,11 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
 
     pxBarrierHandle->uxArriveCounter = 0;
     pxBarrierHandle->uxLeaveCounter = configTIME_REDUNDANT_INSTANCES;
-    pxBarrierHandle->uxFlag = pdTRUE;
-    pxBarrierHandle->xCounterMutex = NULL;
-    pxBarrierHandle->xBarrierSemaphore = NULL;
+    pxBarrierHandle->uxFlag = pdFALSE;
+    pxBarrierHandle->uxTimerFlag = pdFALSE;
+    pxBarrierHandle->xCounterMutex = 0;
+    pxBarrierHandle->xBarrierSemaphore = 0;
+    pxBarrierHandle->xBarrierTimer = 0;
 
     pxBarrierHandle->xCounterMutex = xSemaphoreCreateMutex();
     if ( !pxBarrierHandle->xCounterMutex )
@@ -74,6 +75,20 @@ error_out:
     return pdFREERTOS_ERRNO_ENOMEM;
 }
 
+static void prvBarrierTimerStart( barrierHandle_t * pxBarrierHandle, uint32_t ulCompletionTime )
+{
+    ( void ) pxBarrierHandle;
+    ( void ) ulCompletionTime;
+    if ( pxBarrierHandle->uxTimerFlag == pdTRUE )
+    {
+    /* If timer was already created update the value */
+    }
+    else
+    {
+    /* Create a new timer for other threads */
+    }
+}
+
 void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
 {
     if ( !pxBarrierHandle )
@@ -89,6 +104,8 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
         {
             /* First thread will take the semaphore to block other threads */
             xSemaphoreTake( pxBarrierHandle->xBarrierSemaphore, portMAX_DELAY );
+            /* Completed instances will trigger the timer for other instaces */
+            prvBarrierTimerStart( pxBarrierHandle, 0 );
         }
     }
 
@@ -96,6 +113,7 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
     {
         /* The last thread will leave the barrier and signal the rest of the threads externally */
         pxBarrierHandle->uxArriveCounter--;
+        /* Barrier semaphore must be signaled using 'vBarrierSignal' */
     }
     else
     {
@@ -115,13 +133,38 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle )
     xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
 }
 
+void vBarrierTimerCallback( TimerHandle_t xTimer )
+{
+    ( void ) xTimer;
+    return;
+}
+
 BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 {
+    /* If the barrier is in use, it must be reset */
+    if ( pxBarrierHandle->uxFlag == pdTRUE )
+    {
+        vBarrierSignal ( pxBarrierHandle );
+        return pdFREERTOS_ERRNO_EACCES;
+    }
+
+#if 0
+    if ( pxBarrierHandle->uxTimerFlag )
+    {
+        if ( xTimerDelete( pxBarrierHandle->xBarrierTimer, 1000 ) != pdPASS )
+        {
+            return pdFREERTOS_ERRNO_EACCES;
+        }
+    }
+#endif
+
     taskENTER_CRITICAL();
 
     if ( uxSemaphoreGetCount( pxBarrierHandle->xCounterMutex ) == 0 || uxSemaphoreGetCount ( pxBarrierHandle->xBarrierSemaphore ) == 0 )
+    {
         taskEXIT_CRITICAL();
         return pdFREERTOS_ERRNO_EACCES;
+    }
 
     vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );

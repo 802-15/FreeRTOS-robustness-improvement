@@ -275,6 +275,11 @@
     #if configENABLE_MPU == 1
         #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configENABLE_MPU == 0 must also be set.
     #endif
+
+    /* Timer task priority does not need to be set too high in this usage scenario */
+    #if configUSE_TIMERS == 0
+        #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configUSE_TIMERS == 1 must also be set.
+    #endif
 #endif
 
 #if configMAX_TASK_NAME_LEN < 1
