@@ -1388,9 +1388,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     BaseType_t xTaskGetInstanceNumber( void )
     {
         /* Enables the user application to get information on the currently executing
-         * task instance by returning its number.
+         * task instance by returning its number. Returns -1 if the task is not redundant.
          */
-        UBaseType_t currentInstanceNum = 0;
+        UBaseType_t currentInstanceNum = -1;
         TaskHandle_t currentTaskInstance;
         TCB_t * currentTCB;
 
@@ -1510,9 +1510,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             int i;
             TCB_t * iterTCB;
 
+            /* Return if the calling thread is not the first task instance thread */
+            if ( xTaskGetInstanceNumber() > 0 )
+            {
+                return;
+            }
+
             iterTCB = prvGetTCBFromHandle( xTaskToDelete );
             if ( iterTCB->pxRedundantTask && iterTCB->uxInstanceNum == 0 )
             {
+                /* Destroy the barrier once all the semaphores have been given */
                 #if ( INCLUDE_vTaskDelay == 1 )
                 {
                     while ( xBarrierDestroy( iterTCB->pxRedundantTask->pxBarrierHandle ) != pdPASS )
@@ -1535,8 +1542,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             pxTCB = prvGetTCBFromHandle( xTaskToDelete );
 
             #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
-                /* Set up each task instance priority by recursively calling this function.
-                 * The recursion will only occur if the first instance is referenced in the argument */
+                /* Delete tasks one by one, with the first instance being deleted last */
                 if ( pxTCB->pxRedundantTask && pxTCB->uxInstanceNum == 0 )
                 {
                     for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
@@ -1549,8 +1555,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         {
                             iterTCB = *xTaskToDelete->pxRedundantTask->pxInstances[i];
                         }
-                        /* Set the other instance priorities. Since critical sections nest,
-                        * the functions will be recursively called for each instance without interrupts. */
                         vTaskDelete( iterTCB );
                     }
                     /* Clean up the redundant task control block */
@@ -1944,6 +1948,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         #if ( configUSE_TEMPORAL_REDUNDANCY )
             int i;
             TCB_t * iterTCB;
+
+            /* Return if the calling thread is not the first task instance thread */
+            if ( xTaskGetInstanceNumber() > 0 )
+            {
+                return;
+            }
         #endif
 
         configASSERT( ( uxNewPriority < configMAX_PRIORITIES ) );
@@ -2130,12 +2140,59 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     void vTaskSuspend( TaskHandle_t xTaskToSuspend )
     {
         TCB_t * pxTCB;
+        #if ( configUSE_TEMPORAL_REDUNDANCY )
+            int i;
+            TCB_t * iterTCB;
+
+            /* Return if the calling thread is not the first task instance thread */
+            if ( xTaskGetInstanceNumber() > 0 )
+            {
+                return;
+            }
+        #endif
 
         taskENTER_CRITICAL();
         {
             /* If null is passed in here then it is the running task that is
              * being suspended. */
             pxTCB = prvGetTCBFromHandle( xTaskToSuspend );
+
+            #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+                /* Suspend each of the instances */
+                if ( pxTCB->pxRedundantTask && pxTCB->uxInstanceNum == 0 ) {
+                    if ( pxTCB->pxRedundantTask->pxBarrierHandle->uxFlag == pdTRUE )
+                    {
+                        vBarrierSignal( pxTCB->pxRedundantTask->pxBarrierHandle );
+                        taskEXIT_CRITICAL();
+                        #if ( INCLUDE_vTaskDelay == 1 )
+                        {
+                            while ( pxTCB->pxRedundantTask->pxBarrierHandle->uxArriveCounter > 0 )
+                            {
+                                vTaskDelay( 10 );
+                            }
+                        }
+                        #else
+                        {
+                            while ( pxTCB->pxRedundantTask->pxBarrierHandle->uxArriveCounter > 0 );
+                        }
+                        #endif /* INCLUDE_vTaskDelay */
+                        taskENTER_CRITICAL();
+                    }
+                    for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
+                    {
+                        if ( i == 0 )
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            iterTCB = *xTaskToSuspend->pxRedundantTask->pxInstances[i];
+                        }
+                        vTaskSuspend( iterTCB );
+                    }
+                }
+                /* Suspend the initial instance */
+            #endif
 
             traceTASK_SUSPEND( pxTCB );
 
@@ -2282,6 +2339,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     void vTaskResume( TaskHandle_t xTaskToResume )
     {
         TCB_t * const pxTCB = xTaskToResume;
+        #if ( configUSE_TEMPORAL_REDUNDANCY )
+            int i;
+            TCB_t * iterTCB;
+
+            /* Return if the calling thread is not the first task instance thread */
+            if ( xTaskGetInstanceNumber() > 0 )
+            {
+                return;
+            }
+        #endif
 
         /* It does not make sense to resume the calling task. */
         configASSERT( xTaskToResume );
@@ -2292,6 +2359,24 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         {
             taskENTER_CRITICAL();
             {
+                #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
+                    /* Resume each of the instances */
+                    if ( pxTCB->pxRedundantTask && pxTCB->uxInstanceNum == 0 ) {
+                        for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
+                        {
+                            if ( i == 0 )
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                iterTCB = *xTaskToResume->pxRedundantTask->pxInstances[i];
+                            }
+                            vTaskResume( iterTCB );
+                        }
+                    }
+                    /* Resume the initial instance */
+                #endif
                 if( prvTaskIsTaskSuspended( pxTCB ) != pdFALSE )
                 {
                     traceTASK_RESUME( pxTCB );

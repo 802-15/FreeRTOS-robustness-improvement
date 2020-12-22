@@ -55,7 +55,8 @@ USART1_SendString(messageBuffer);
 
 /* USER CODE BEGIN PV */
 
-TaskHandle_t blinkyHandle;
+TaskHandle_t  blinkyHandle;
+TimerHandle_t blinkyTimerHandle;
 
 /* USER CODE END PV */
 
@@ -67,6 +68,13 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+ void vTimerCallback(TimerHandle_t xTimer)
+ {
+   xTimerStop(xTimer, 0);
+   /* Resume the blinky task from timer callback */
+   vTaskResume(blinkyHandle);
+ }
 
 void blinkyFailureTest(void)
 {
@@ -131,7 +139,8 @@ static void blinkTask(void *pvParameters)
      * to trigger the failure handle. */
     xTaskInstanceDone( instanceNumber );
 
-    vTaskDelete( blinkyHandle );
+    xTimerStart(blinkyTimerHandle, 0);
+    vTaskSuspend( blinkyHandle );
   }
 }
 
@@ -161,6 +170,9 @@ int main(void)
 
   /* Demonstration failure handle is registered */
   vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
+
+  /* Task unblock timer */
+  blinkyTimerHandle = xTimerCreate("Timer", pdMS_TO_TICKS(6000), pdTRUE, ( void * ) 0, vTimerCallback);
 
   vTaskStartScheduler();
 }
