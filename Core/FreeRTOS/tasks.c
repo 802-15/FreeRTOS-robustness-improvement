@@ -246,14 +246,16 @@
     #define taskEVENT_LIST_ITEM_VALUE_IN_USE    0x80000000UL
 #endif
 
+/**
+ * task. h
+ * Redundant task control block stores the global information for the redundant task.
+ * This structure must be exposed for the barrier creation function.
+ */
 #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
-    /*
-    * Redundant task control block. This structure is dynamically allocate on
-    * for each redudant task (set of task instances).
-    */
     typedef struct redundantTaskControlBlock
     {
         UBaseType_t uxTaskState;                                    /*< Redundant task state (global) */
+        TickType_t xTimeoutTicks;                                   /*< Number of ticks until the task timer triggers the timeout callback */
         barrierHandle_t * pxBarrierHandle;                          /*< Barrier handle for the redundant task instance */
         void ( * pvFailureHandle ) ( void );                        /*< The task failure function pointer. */
         TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
@@ -934,7 +936,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                             const configSTACK_DEPTH_TYPE usStackDepth,
                             void * const pvParameters,
                             UBaseType_t uxPriority,
-                            TaskHandle_t * const pxCreatedTask )
+                            TaskHandle_t * const pxCreatedTask,
+                            TickType_t xTimeoutTicks )
     {
         /* Create a redundant FreeRTOS task by making it execute twice.
          * Two identical task instances are created at the same time, but only
@@ -961,7 +964,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
 
         /* Initialize the barrier for task instance synchronization */
-        if ( xBarrierCreate( &pxBarrierHandle ) != pdPASS || !pxBarrierHandle )
+        if ( xBarrierCreate( &pxBarrierHandle, pxCreatedTask, xTimeoutTicks ) != pdPASS || !pxBarrierHandle )
             goto error_out;
 
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
@@ -1015,6 +1018,11 @@ error_out:
 
 out:
         taskEXIT_CRITICAL();
+
+        /* Start the barrier timer (watchdog) */
+        if ( pxBarrierHandle )
+            xTimerStart( pxRedundantTask->pxBarrierHandle->xBarrierTimer, 100 );
+
         return xReturn;
     }
 
@@ -1435,11 +1443,18 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         currentTaskInstance = xTaskGetCurrentTaskHandle();
         currentTCB = prvGetTCBFromHandle( currentTaskInstance );
 
+        if ( !currentTCB->pxRedundantTask )
+        {
+            taskEXIT_CRITICAL();
+            return pdFAIL;
+        }
+
         currentTCB->uxExecResult = uxExecResult;
         currentTCB->uxExecCount++;
 
         /* Instances returning pdPASS will be marked by 'done', otherwise they are treated as failed */
-        if ( currentTCB->uxExecResult == pdPASS ) {
+        if ( currentTCB->uxExecResult == pdPASS )
+        {
             currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
         }
         else
@@ -1496,8 +1511,20 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         taskEXIT_CRITICAL();
 
+        /* Make sure the timer gets the reset message by blocking this (and thus other) threads */
+        while ( xTimerReset( currentTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer, 10 ) != pdPASS ) {
+            #if ( INCLUDE_vTaskDelay == 1 )
+            {
+                vTaskDelay( 10 );
+            }
+            #else
+                continue;
+            #endif
+        }
+
         return xReturn;
     }
+
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 /*-----------------------------------------------------------*/
 

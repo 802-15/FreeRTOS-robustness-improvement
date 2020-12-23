@@ -94,8 +94,6 @@ to exclude the API function. */
 #define configUSE_TEMPORAL_REDUNDANCY		1
 /* Number of task instances to be created */
 #define configTIME_REDUNDANT_INSTANCES		3
-/* Time out threshold */
-#define configINSTANCE_TIMEOUT_THRESHOLD	3
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS

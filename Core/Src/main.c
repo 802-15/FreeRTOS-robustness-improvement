@@ -163,7 +163,7 @@ int main(void)
   SERIAL_PRINT(INIT_MSG);
 
   /* Create a simple blinky demonstration task */
-  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle);
+  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle, pdMS_TO_TICKS(8000));
   if (error <= 0) {
     while(1);
   }

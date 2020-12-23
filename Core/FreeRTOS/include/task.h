@@ -336,7 +336,7 @@ typedef enum
  * \defgroup xTaskCreate xTaskCreate
  * \ingroup Tasks
  */
-#if ( configSUPPORT_DYNAMIC_ALLOCATION == 1 )
+#if ( ( configSUPPORT_DYNAMIC_ALLOCATION  == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 0 ) )
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
                             const char * const pcName,     /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
                             const configSTACK_DEPTH_TYPE usStackDepth,
@@ -346,6 +346,30 @@ typedef enum
 #endif
 
 #if ( ( configSUPPORT_DYNAMIC_ALLOCATION  == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 1 ) )
+
+/**
+ * task. h
+ * <pre>
+ * BaseType_t xTaskCreate(
+ *                            TaskFunction_t pvTaskCode,
+ *                            const char * const pcName,
+ *                            configSTACK_DEPTH_TYPE usStackDepth,
+ *                            void *pvParameters,
+ *                            UBaseType_t uxPriority,
+ *                            TaskHandle_t *pvCreatedTask,
+ *                            TickType_t xTimeoutTicks,
+ *                        );
+ * </pre>
+ *
+ * Create configTIME_REDUNDANT_INSTANCES taks to run seemingly in parallel.
+ */
+    BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
+                            const char * const pcName,
+                            const configSTACK_DEPTH_TYPE usStackDepth,
+                            void * const pvParameters,
+                            UBaseType_t uxPriority,
+                            TaskHandle_t * const pxCreatedTask,
+                            TickType_t xTimeoutTicks ) PRIVILEGED_FUNCTION;
 
 /**
  * task. h

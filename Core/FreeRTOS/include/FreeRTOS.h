@@ -258,11 +258,7 @@
 
 #if configUSE_TEMPORAL_REDUNDANCY == 1
 
-    /* Set up default values for number of instances and the timeout threshold */
-    #ifndef configINSTANCE_TIMEOUT_THRESHOLD
-        #define configINSTANCE_TIMEOUT_THRESHOLD 3
-    #endif
-
+    /* Set up default values for number of instances */
     #ifndef configTIME_REDUNDANT_INSTANCES
         #define configTIME_REDUNDANT_INSTANCES 2
     #endif

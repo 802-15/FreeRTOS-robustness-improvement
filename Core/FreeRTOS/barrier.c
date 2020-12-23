@@ -35,15 +35,15 @@
 
 /* FreeRTOS includes. */
 #include "FreeRTOS.h"
-#include "FreeRTOSConfig.h"
 #include "barrier.h"
 #include "task.h"
 
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
+
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks )
 {
     barrierHandle_t * pxBarrierHandle = NULL;
 
-    pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) );
+    pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) + sizeof( TimerHandle_t ) );
     if ( !pxBarrierHandle )
         return pdFREERTOS_ERRNO_ENOMEM;
 
@@ -64,6 +64,13 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle )
     if ( !pxBarrierHandle->xBarrierSemaphore )
         goto error_out;
 
+    /* Create the one-shot timer and start it  */
+    pxBarrierHandle->xBarrierTimer = xTimerCreate( "Barrier timer", xTimeoutTicks, pdFALSE, pxTaskHandle, vBarrierTimerCallback );
+    if ( !pxBarrierHandle->xBarrierTimer )
+    {
+        goto error_out;
+    }
+
     *pxTaskBarrierHandle = pxBarrierHandle;
     return pdPASS;
 
@@ -71,22 +78,10 @@ error_out:
     /* vSemaphoreDelete calls vPortFree eventually */
     vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
+    xTimerDelete( pxBarrierHandle->xBarrierTimer, 100 );
     vPortFree( pxBarrierHandle );
+    pxBarrierHandle = NULL;
     return pdFREERTOS_ERRNO_ENOMEM;
-}
-
-static void prvBarrierTimerStart( barrierHandle_t * pxBarrierHandle, uint32_t ulCompletionTime )
-{
-    ( void ) pxBarrierHandle;
-    ( void ) ulCompletionTime;
-    if ( pxBarrierHandle->uxTimerFlag == pdTRUE )
-    {
-    /* If timer was already created update the value */
-    }
-    else
-    {
-    /* Create a new timer for other threads */
-    }
 }
 
 void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
@@ -104,16 +99,17 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
         {
             /* First thread will take the semaphore to block other threads */
             xSemaphoreTake( pxBarrierHandle->xBarrierSemaphore, portMAX_DELAY );
-            /* Completed instances will trigger the timer for other instaces */
-            prvBarrierTimerStart( pxBarrierHandle, 0 );
         }
     }
+
+    /* Reset the barrier's timer on each new thread */
+    xTimerReset( pxBarrierHandle->xBarrierTimer, 0 );
 
     if ( pxBarrierHandle->uxArriveCounter == pxBarrierHandle->uxLeaveCounter )
     {
         /* The last thread will leave the barrier and signal the rest of the threads externally */
         pxBarrierHandle->uxArriveCounter--;
-        /* Barrier semaphore must be signaled using 'vBarrierSignal' */
+        xTimerStop( pxBarrierHandle->xBarrierTimer, 0 );
     }
     else
     {
@@ -133,12 +129,6 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle )
     xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
 }
 
-void vBarrierTimerCallback( TimerHandle_t xTimer )
-{
-    ( void ) xTimer;
-    return;
-}
-
 BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 {
     /* If the barrier is in use, it must be reset */
@@ -148,15 +138,10 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
         return pdFREERTOS_ERRNO_EACCES;
     }
 
-#if 0
-    if ( pxBarrierHandle->uxTimerFlag )
+    if ( pxBarrierHandle->xBarrierTimer )
     {
-        if ( xTimerDelete( pxBarrierHandle->xBarrierTimer, 1000 ) != pdPASS )
-        {
-            return pdFREERTOS_ERRNO_EACCES;
-        }
+        xTimerDelete( pxBarrierHandle->xBarrierTimer, 0 );
     }
-#endif
 
     taskENTER_CRITICAL();
 
@@ -174,4 +159,15 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 
     taskEXIT_CRITICAL();
     return pdPASS;
+}
+
+void vBarrierTimerCallback( TimerHandle_t xTimer )
+{
+    /* Callback function for the oneshot barrier "watchdog" timer.
+    * This timer must ensure that the barrier will do the proper error
+    * handling in case some or all threads do not make it to the barrier.
+    * This function is called from the FreeRTOS timer daemon and it should
+    * result in changing the state of said task to 'blocked' */
+    pvFailureHandle();
+    xTimerReset( xTimer, 0 );
 }

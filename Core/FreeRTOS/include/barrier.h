@@ -58,7 +58,7 @@ typedef struct barrierHandle
 /**
  * barrier. h
  * <pre>
- * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle );
+ * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks );
  * </pre>
  * Create a barrier for task instances synchronization. The barrier
  * instance consits of a mutex, counting semaphore, state variable and two
@@ -67,11 +67,14 @@ typedef struct barrierHandle
  * @param pxTaskBarrierHandle Used to pass back a handle by which the barrier
  * information can be accessed.
  *
+ * @param pxRedundantTask Pointer to the redundant task is copied to the timer
+ * ID, to reference the redundant task inside the timer callback function.
+ *
  * @return pdPASS if the barrier was successfully created and added to the
  * redundant task TCB, otherwise an error code defined in the file projdefs.h
  *
  */
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle );
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks );
 
 /**
  * barrier. h
@@ -95,6 +98,20 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
 /**
  * barrier. h
  * <pre>
+ * void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+ * </pre>
+ * Signal the barrier and release the waiting threads. This is done by
+ * giving the sempahore and setting the barrier flag to unused (pdFALSE) state.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ */
+void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+
+/**
+ * barrier. h
+ * <pre>
  * BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  * </pre>
  * Destroy the barrier instance by deleting the semaphores and freeing
@@ -112,15 +129,14 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
 /**
  * barrier. h
  * <pre>
- * void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+ * void vBarrierTimerCallback( TimerHandle_t xTimer );
  * </pre>
- * Signal the barrier and release the waiting threads. This is done by
- * giving the sempahore and setting the barrier flag to unused (pdFALSE) state.
  *
- * @param pxBarrierHandle Barrier handle is used to access the information
- * related to the barrier.
+ * Software watchdog callback.
+ *
+ * @param taskHandle Timer handle to ensure the timer callback prototype conformity
  *
  */
-void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
+void vBarrierTimerCallback( TimerHandle_t xTimer );
 
 #endif /* INC_BARRIER_H */
