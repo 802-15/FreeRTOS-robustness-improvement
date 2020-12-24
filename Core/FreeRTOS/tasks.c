@@ -256,7 +256,8 @@
     {
         UBaseType_t uxTaskState;                                    /*< Redundant task state (global) */
         TickType_t xTimeoutTicks;                                   /*< Number of ticks until the task timer triggers the timeout callback */
-        barrierHandle_t * pxBarrierHandle;                          /*< Barrier handle for the redundant task instance */
+        barrierHandle_t * pxBarrierHandle;                          /*< Points to the barrier used for instance synchronization ran from the 'xTaskInstanceDone' function */
+        barrierHandle_t * pxSuspensionBarrierHandle;                /*< Points to the barrier used for instance synchronization inside the 'vTaskSuspend' function */
         void ( * pvFailureHandle ) ( void );                        /*< The task failure function pointer. */
         TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
     } redundantTCB_t;
@@ -351,7 +352,6 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         UBaseType_t uxInstanceState;        /*< Set to the current instance state (see projdefs.h) */
         UBaseType_t uxExecCount;            /*< Stores the number of executions. */
         UBaseType_t uxExecResult;           /*< Stores arbitrary number representing execution result. */
-        uint32_t ulSwitchedInTicks;         /*< Stores the amount of time the task has spent in the Running state. */
         redundantTCB_t * pxRedundantTask;   /*< Pointer to redundant task structure with global task information */
     #endif
 } tskTCB;
@@ -962,9 +962,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         pxRedundantTask->pvFailureHandle = NULL;
         pxRedundantTask->pxBarrierHandle = NULL;
         pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
+        pxRedundantTask->xTimeoutTicks = xTimeoutTicks;
 
         /* Initialize the barrier for task instance synchronization */
-        if ( xBarrierCreate( &pxBarrierHandle, pxCreatedTask, xTimeoutTicks ) != pdPASS || !pxBarrierHandle )
+        if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureHandle, xTimeoutTicks ) != pdPASS || !pxBarrierHandle )
             goto error_out;
 
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
@@ -1222,7 +1223,6 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
             pxNewTCB->uxExecCount = 0;
             pxNewTCB->uxExecResult = 0;
             pxNewTCB->pxRedundantTask = NULL;
-            pxNewTCB->ulSwitchedInTicks = 0UL;
         }
     #endif
 
@@ -1389,6 +1389,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         pxCurrentInstanceTCB = prvGetTCBFromHandle( TaskHandle );
         pxCurrentInstanceTCB->pxRedundantTask->pvFailureHandle = pvFailureFunc;
+
+        /* Send failure function to barrier watchdog timer */
+        if ( pxCurrentInstanceTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer )
+        {
+            pxCurrentInstanceTCB->pxRedundantTask->pxBarrierHandle->pxCallbackStruct.pvFailureFunc = pvFailureFunc;
+            vTimerSetTimerID( pxCurrentInstanceTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer,
+                            ( void * ) &pxCurrentInstanceTCB->pxRedundantTask->pxBarrierHandle->pxCallbackStruct );
+        }
 
         taskEXIT_CRITICAL();
     }
@@ -2171,12 +2179,41 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             int i;
             TCB_t * iterTCB;
 
-            /* Return if the calling thread is not the first task instance thread */
-            if ( xTaskGetInstanceNumber() > 0 )
+            iterTCB = prvGetTCBFromHandle( xTaskToSuspend );
+
+            /* Detect if the currently running task has decided to suspend itself */
+            if ( iterTCB == pxCurrentTCB )
             {
-                return;
+                /* Create barrier and block the thread of the redundant task deciding to suspend itself */
+                if ( xTaskGetInstanceNumber() > 0 )
+                {
+                    if ( !iterTCB->pxRedundantTask->pxSuspensionBarrierHandle )
+                    {
+                        iterTCB->pxRedundantTask->pxSuspensionBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) );
+                        if ( !iterTCB->pxRedundantTask->pxSuspensionBarrierHandle )
+                        {
+                            return;
+                        }
+                        if ( xBarrierCreate( &iterTCB->pxRedundantTask->pxSuspensionBarrierHandle, NULL, 0 ) != pdPASS || !iterTCB->pxRedundantTask->pxSuspensionBarrierHandle )
+                        {
+                            vPortFree( iterTCB->pxRedundantTask->pxSuspensionBarrierHandle );
+                            return;
+                        }
+                    }
+                    /* Block the thread running the redundant task to prevent it from running while the task is being suspended (it may take a while) */
+                    vBarrierEnter( iterTCB->pxRedundantTask->pxSuspensionBarrierHandle );
+                }
             }
-        #endif
+            else
+            {
+                /* If the redundant task is suspending another task simply return on every thread except the first instace */
+                if ( xTaskGetInstanceNumber() > 0 )
+                {
+                    return;
+                }
+            }
+        /* Every thread except the first should never reach the following part of the function */
+        #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
         taskENTER_CRITICAL();
         {
@@ -2215,6 +2252,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         {
                             iterTCB = *xTaskToSuspend->pxRedundantTask->pxInstances[i];
                         }
+                        /* Stop the task state synchronization barrier */
+                        xTimerStop( iterTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer, 0 );
                         vTaskSuspend( iterTCB );
                     }
                 }
@@ -2375,6 +2414,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             {
                 return;
             }
+
+            iterTCB = prvGetTCBFromHandle( xTaskToResume );
+
+            if ( iterTCB == pxCurrentTCB )
+            {
+                if ( iterTCB->pxRedundantTask && iterTCB->pxRedundantTask->pxSuspensionBarrierHandle->uxFlag )
+                {
+                    vBarrierSignal( iterTCB->pxRedundantTask->pxSuspensionBarrierHandle );
+                }
+            }
         #endif
 
         /* It does not make sense to resume the calling task. */
@@ -2399,6 +2448,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                             {
                                 iterTCB = *xTaskToResume->pxRedundantTask->pxInstances[i];
                             }
+                            /* Restart the instance state synchronization barrier timer */
+                            xTimerReset( iterTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer, 0 );
                             vTaskResume( iterTCB );
                         }
                     }
@@ -3305,16 +3356,6 @@ BaseType_t xTaskIncrementTick( void )
         {
             mtCOVERAGE_TEST_MARKER();
         }
-
-        #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
-            /* If the time between this tick and the previous was spent running
-             * running a redundant task instance, increment the instance tick counter.
-             * The tick counter is used to measure instance completion time. */
-            if ( pxCurrentTCB->pxRedundantTask && pxCurrentTCB->uxInstanceState == pdFREERTOS_INSTANCE_RUNNING )
-            {
-                pxCurrentTCB->ulSwitchedInTicks++;
-            }
-        #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
         /* See if this tick has made a timeout expire.  Tasks are stored in
          * the  queue in the order of their wake time - meaning once one task

@@ -39,7 +39,7 @@
 #include "task.h"
 
 
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks )
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks )
 {
     barrierHandle_t * pxBarrierHandle = NULL;
 
@@ -55,6 +55,8 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTask
     pxBarrierHandle->xBarrierSemaphore = 0;
     pxBarrierHandle->xBarrierTimer = 0;
 
+    pxBarrierHandle->pxCallbackStruct.pvFailureFunc = pvFailureFunc;
+
     pxBarrierHandle->xCounterMutex = xSemaphoreCreateMutex();
     if ( !pxBarrierHandle->xCounterMutex )
         goto error_out;
@@ -64,11 +66,14 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTask
     if ( !pxBarrierHandle->xBarrierSemaphore )
         goto error_out;
 
-    /* Create the one-shot timer and start it  */
-    pxBarrierHandle->xBarrierTimer = xTimerCreate( "Barrier timer", xTimeoutTicks, pdFALSE, pxTaskHandle, vBarrierTimerCallback );
-    if ( !pxBarrierHandle->xBarrierTimer )
+    /* Create the one-shot timer and start it */
+    if ( xTimeoutTicks )
     {
-        goto error_out;
+        pxBarrierHandle->xBarrierTimer = xTimerCreate( "Barrier timer", xTimeoutTicks, pdFALSE, ( void * ) &pxBarrierHandle->pxCallbackStruct, vBarrierTimerCallback );
+        if ( !pxBarrierHandle->xBarrierTimer )
+        {
+            goto error_out;
+        }
     }
 
     *pxTaskBarrierHandle = pxBarrierHandle;
@@ -103,7 +108,8 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
     }
 
     /* Reset the barrier's timer on each new thread */
-    xTimerReset( pxBarrierHandle->xBarrierTimer, 0 );
+    if ( pxBarrierHandle->xBarrierTimer )
+        xTimerReset( pxBarrierHandle->xBarrierTimer, 0 );
 
     if ( pxBarrierHandle->uxArriveCounter == pxBarrierHandle->uxLeaveCounter )
     {
@@ -163,11 +169,13 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 
 void vBarrierTimerCallback( TimerHandle_t xTimer )
 {
-    /* Callback function for the oneshot barrier "watchdog" timer.
-    * This timer must ensure that the barrier will do the proper error
-    * handling in case some or all threads do not make it to the barrier.
-    * This function is called from the FreeRTOS timer daemon and it should
-    * result in changing the state of said task to 'blocked' */
-    pvFailureHandle();
-    xTimerReset( xTimer, 0 );
+    callbackContainer_t * xCallbackContainer = NULL;
+
+    xCallbackContainer = ( callbackContainer_t * ) pvTimerGetTimerID( xTimer );
+    if ( xCallbackContainer && xCallbackContainer->pvFailureFunc )
+    {
+        /* Execute failure function from the timer */
+        xCallbackContainer->pvFailureFunc();
+    }
+    /* With one or more threads blocked, there is no choice but to delete the task */
 }

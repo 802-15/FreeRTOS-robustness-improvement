@@ -42,6 +42,11 @@
 #endif
 /* *INDENT-ON* */
 
+typedef struct functionContainer
+{
+    void ( * pvFailureFunc ) ( void );      /*< Callback function container required for passing function pointers using timer ID API */
+} callbackContainer_t;
+
 typedef struct barrierHandle
 {
     UBaseType_t uxArriveCounter;            /*< Count of threads that have entered the barrier */
@@ -53,31 +58,38 @@ typedef struct barrierHandle
     SemaphoreHandle_t xBarrierSemaphore;    /*< Barrier waiting semaphore mutex */
 
     TimerHandle_t xBarrierTimer;            /*< Barrier can time out if the instances take too long to complete */
+
+    callbackContainer_t pxCallbackStruct;   /*< Stores pointer to callback function */
 } barrierHandle_t;
 
 /**
- * barrier. h
+ * barrier.h
  * <pre>
- * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks );
+ * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks );
  * </pre>
  * Create a barrier for task instances synchronization. The barrier
  * instance consits of a mutex, counting semaphore, state variable and two
- * counter variables.
+ * counter variables. An additional timer is created for reseting the task
+ * in case it gets blocked.
  *
  * @param pxTaskBarrierHandle Used to pass back a handle by which the barrier
  * information can be accessed.
  *
- * @param pxRedundantTask Pointer to the redundant task is copied to the timer
- * ID, to reference the redundant task inside the timer callback function.
+ * @param pvFailureFunc Pointer to the barrier watchdog timer callback function.
+ * This function is the same as the task failure function called if all instances
+ * did not return an expected value.
+ *
+ * @param xTimeoutTicksPointer Number of ticks which servers as the watchdog
+ * timer period.
  *
  * @return pdPASS if the barrier was successfully created and added to the
  * redundant task TCB, otherwise an error code defined in the file projdefs.h
  *
  */
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTaskHandle, TickType_t xTimeoutTicks );
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks );
 
 /**
- * barrier. h
+ * barrier.h
  * <pre>
  * void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
  * </pre>
@@ -96,7 +108,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void * pxTask
 void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
 
 /**
- * barrier. h
+ * barrier.h
  * <pre>
  * void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
  * </pre>
@@ -110,11 +122,11 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
 void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
 
 /**
- * barrier. h
+ * barrier.h
  * <pre>
  * BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  * </pre>
- * Destroy the barrier instance by deleting the semaphores and freeing
+ * Destroy the barrier instance by deleting the semaphores, timers and freeing
  * the barrier structure.
  *
  * @param pxBarrierHandle Barrier handle is used to access the information
@@ -127,14 +139,19 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
 BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
 
 /**
- * barrier. h
+ * barrier.h
  * <pre>
  * void vBarrierTimerCallback( TimerHandle_t xTimer );
  * </pre>
  *
- * Software watchdog callback.
+ * Callback function for the oneshot barrier "watchdog" timer.
+ * This timer must ensure that the barrier will do the proper error
+ * handling in case some or all threads do not make it to the barrier.
+ * This function is called from the FreeRTOS timer daemon and it should
+ * not result in changing the state of said task to 'blocked'.
+ * Currently the timer will execute the failure handle and restart the task.
  *
- * @param taskHandle Timer handle to ensure the timer callback prototype conformity
+ * @param xTimer Timer handle to ensure the timer callback prototype conformity
  *
  */
 void vBarrierTimerCallback( TimerHandle_t xTimer );
