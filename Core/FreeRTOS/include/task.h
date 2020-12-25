@@ -348,7 +348,7 @@ typedef enum
 #if ( ( configSUPPORT_DYNAMIC_ALLOCATION  == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 1 ) )
 
 /**
- * task. h
+ * task.h
  * <pre>
  * BaseType_t xTaskCreate(
  *                            TaskFunction_t pvTaskCode,
@@ -372,7 +372,7 @@ typedef enum
                             TickType_t xTimeoutTicks ) PRIVILEGED_FUNCTION;
 
 /**
- * task. h
+ * task.h
  * <pre>
  * BaseType_t xTaskCreateInstance( TaskFunction_t pvTaskCode,
  *                                 const char * const pcName,
@@ -393,7 +393,7 @@ typedef enum
                                     TaskHandle_t * const pxCreatedTask ) PRIVILEGED_FUNCTION;
 
 /**
- * task. h
+ * task.h
  * <pre>
  * BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
  * </pre>
@@ -413,7 +413,7 @@ typedef enum
     BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
 
 /**
- * task. h
+ * task.h
  * <pre>
  * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
  *                                    void ( *pvFailureFunc ) ( void ) );
@@ -432,7 +432,7 @@ typedef enum
                                        void ( *pvFailureFunc ) ( void ) );
 
 /**
- * task. h
+ * task.h
  * <pre>
  * BaseType_t xTaskGetInstanceNumber( void );
  * </pre>
@@ -446,6 +446,34 @@ typedef enum
  * non-redundant task.
  * */
     BaseType_t xTaskGetInstanceNumber( void );
+
+/**
+ * task.h
+ * <pre>
+ * void vTaskRestart( TaskHandle_t xTaskToRestart );
+ * </pre>
+ *
+ * Restart the redundant task after barrier timeout
+ *
+ * @param taskHandle Restarting task handle
+ *
+ * */
+    void vTaskReset( TaskHandle_t xTaskToRestart );
+
+/**
+ * task.h
+ * <pre>
+ * void vTaskStoreData( TaskHandle_t TaskHandle, void * pvParameters );
+ * </pre>
+ *
+ * Store task data.
+ *
+ * @param TaskHandle Storing task handle
+ *
+ * @param pvParameters Pointer to data
+ *
+ **/
+    void vTaskStoreData( TaskHandle_t TaskHandle, void * pvParameters );
 
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
 

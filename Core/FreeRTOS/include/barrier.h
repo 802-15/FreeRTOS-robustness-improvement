@@ -45,6 +45,7 @@
 typedef struct functionContainer
 {
     void ( * pvFailureFunc ) ( void );      /*< Callback function container required for passing function pointers using timer ID API */
+    TaskHandle_t * xTaskToReset;            /*< Task handle is used to reset the task from the timer callback */
 } callbackContainer_t;
 
 typedef struct barrierHandle
@@ -65,7 +66,7 @@ typedef struct barrierHandle
 /**
  * barrier.h
  * <pre>
- * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks );
+ * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask );
  * </pre>
  * Create a barrier for task instances synchronization. The barrier
  * instance consits of a mutex, counting semaphore, state variable and two
@@ -82,11 +83,14 @@ typedef struct barrierHandle
  * @param xTimeoutTicksPointer Number of ticks which servers as the watchdog
  * timer period.
  *
+ * @param pxCreatedTask Task handle pointer used for re-creating the task
+ * in case the barrier times out.
+ *
  * @return pdPASS if the barrier was successfully created and added to the
  * redundant task TCB, otherwise an error code defined in the file projdefs.h
  *
  */
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks );
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask );
 
 /**
  * barrier.h

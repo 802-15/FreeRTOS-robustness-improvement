@@ -39,9 +39,13 @@
 #include "task.h"
 
 
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks )
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask )
 {
     barrierHandle_t * pxBarrierHandle = NULL;
+
+    /* Barrier can't have a timer set up without a task handle for reseting the task */
+    if ( xTimeoutTicks != 0 && !pxCreatedTask )
+        goto error_out;
 
     pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) + sizeof( TimerHandle_t ) );
     if ( !pxBarrierHandle )
@@ -56,6 +60,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFa
     pxBarrierHandle->xBarrierTimer = 0;
 
     pxBarrierHandle->pxCallbackStruct.pvFailureFunc = pvFailureFunc;
+    pxBarrierHandle->pxCallbackStruct.xTaskToReset = pxCreatedTask;
 
     pxBarrierHandle->xCounterMutex = xSemaphoreCreateMutex();
     if ( !pxBarrierHandle->xCounterMutex )
@@ -174,8 +179,12 @@ void vBarrierTimerCallback( TimerHandle_t xTimer )
     xCallbackContainer = ( callbackContainer_t * ) pvTimerGetTimerID( xTimer );
     if ( xCallbackContainer && xCallbackContainer->pvFailureFunc )
     {
-        /* Execute failure function from the timer */
+        /* Execute failure function from the timer daemon thread */
         xCallbackContainer->pvFailureFunc();
     }
-    /* With one or more threads blocked, there is no choice but to delete the task */
+    /* With one or more threads blocked, reset the task */
+    if ( xCallbackContainer->xTaskToReset )
+    {
+        vTaskReset( * xCallbackContainer->xTaskToReset );
+    }
 }

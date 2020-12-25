@@ -260,6 +260,7 @@
         barrierHandle_t * pxSuspensionBarrierHandle;                /*< Points to the barrier used for instance synchronization inside the 'vTaskSuspend' function */
         void ( * pvFailureHandle ) ( void );                        /*< The task failure function pointer. */
         TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
+        void * pvTaskParams;                                        /*< Pointer to parameters that can be passed between execution instances */
     } redundantTCB_t;
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
@@ -939,11 +940,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
                             TaskHandle_t * const pxCreatedTask,
                             TickType_t xTimeoutTicks )
     {
-        /* Create a redundant FreeRTOS task by making it execute twice.
-         * Two identical task instances are created at the same time, but only
-         * one can execute at any given time. FreeRTOS developer must
-         * explicitly denote that a task has finished one of its iterations by
-         * calling the function xTaskInstanceDone. */
         BaseType_t xReturn = pdFAIL;
         BaseType_t i = 0;
         BaseType_t errorCode = pdFAIL;
@@ -954,6 +950,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
         taskENTER_CRITICAL();
 
+        /* Check if this task will preempt the timer task, thus preventing the
+         * timer task from executing. Timer task preemption should result in an
+         * error since the barrier timer needs to be able to execute its callback
+         * if one of the threads fails to reach the barrier.
+         */
+        if ( uxPriority > configTIMER_TASK_PRIORITY )
+            goto error_out;
+
         /* Redundant task handle */
         pxRedundantTask = pvPortMalloc( sizeof( redundantTCB_t ) );
         if ( !pxRedundantTask )
@@ -963,9 +967,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         pxRedundantTask->pxBarrierHandle = NULL;
         pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
         pxRedundantTask->xTimeoutTicks = xTimeoutTicks;
+        pxRedundantTask->pvTaskParams = NULL;
+        pxRedundantTask->pxSuspensionBarrierHandle = NULL;
 
         /* Initialize the barrier for task instance synchronization */
-        if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureHandle, xTimeoutTicks ) != pdPASS || !pxBarrierHandle )
+        if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureHandle, xTimeoutTicks, pxCreatedTask ) != pdPASS || !pxBarrierHandle )
             goto error_out;
 
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
@@ -1423,6 +1429,28 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         return currentInstanceNum;
     }
 
+    void vTaskStoreData( TaskHandle_t TaskHandle, void * pvParameters )
+    {
+        /* Store pointer to some task related data, to be shared between task
+         * resets. Only first instances of a redundant task will actually
+         * update the pointer to the data, stored in the TCB.
+         */
+        TCB_t * currentTCB;
+
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+             return;
+        }
+
+        taskENTER_CRITICAL();
+
+        currentTCB = prvGetTCBFromHandle( TaskHandle );
+        if ( currentTCB->pxRedundantTask )
+            currentTCB->pxRedundantTask->pvTaskParams = pvParameters;
+
+        taskEXIT_CRITICAL();
+    }
+
     BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult )
     {
         /* This function must be called after one instance of the task has been
@@ -1531,6 +1559,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         }
 
         return xReturn;
+    }
+
+    void vTaskReset( TaskHandle_t xTaskToRestart )
+    {
+        ( void ) xTaskToRestart;
+        return;
     }
 
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
@@ -2194,7 +2228,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         {
                             return;
                         }
-                        if ( xBarrierCreate( &iterTCB->pxRedundantTask->pxSuspensionBarrierHandle, NULL, 0 ) != pdPASS || !iterTCB->pxRedundantTask->pxSuspensionBarrierHandle )
+                        if ( xBarrierCreate( &iterTCB->pxRedundantTask->pxSuspensionBarrierHandle, NULL, 0, NULL ) != pdPASS || !iterTCB->pxRedundantTask->pxSuspensionBarrierHandle )
                         {
                             vPortFree( iterTCB->pxRedundantTask->pxSuspensionBarrierHandle );
                             return;

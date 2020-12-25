@@ -256,12 +256,7 @@
     #define configUSE_TEMPORAL_REDUNDANCY 0
 #endif
 
-#if configUSE_TEMPORAL_REDUNDANCY == 1
-
-    /* Set up default values for number of instances */
-    #ifndef configTIME_REDUNDANT_INSTANCES
-        #define configTIME_REDUNDANT_INSTANCES 2
-    #endif
+#if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
 
     /* Additional criteria must be met for using temporal redundancy */
     #if configSUPPORT_DYNAMIC_ALLOCATION == 0
@@ -276,7 +271,13 @@
     #if configUSE_TIMERS == 0
         #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configUSE_TIMERS == 1 must also be set.
     #endif
-#endif
+
+    /* Set up default values for number of instances */
+    #ifndef configTIME_REDUNDANT_INSTANCES
+        #define configTIME_REDUNDANT_INSTANCES 2
+    #endif
+
+#endif /* configUSE_TEMPORAL_REDUNDANCY */
 
 #if configMAX_TASK_NAME_LEN < 1
     #error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
