@@ -135,12 +135,17 @@ static void blinkTask(void *pvParameters)
 
     vTaskDelay(xDelay);
 
+    /* Test scenario: block a single thread and prevent it from reaching the barrier. */
+    if ( instanceNumber == 2 ) {
+      while(1);
+    }
+
     /* Task instance is finished, purposefully pass differing exit codes
      * to trigger the failure handle. */
     xTaskInstanceDone( instanceNumber );
 
-    xTimerStart(blinkyTimerHandle, 0);
-    vTaskSuspend( blinkyHandle );
+    //xTimerStart(blinkyTimerHandle, 0);
+    //vTaskSuspend( blinkyHandle );
   }
 }
 
@@ -163,7 +168,7 @@ int main(void)
   SERIAL_PRINT(INIT_MSG);
 
   /* Create a simple blinky demonstration task */
-  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-1, &blinkyHandle, pdMS_TO_TICKS(8000));
+  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-2, &blinkyHandle, pdMS_TO_TICKS(8000));
   if (error <= 0) {
     while(1);
   }
@@ -172,7 +177,7 @@ int main(void)
   vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
 
   /* Task unblock timer */
-  blinkyTimerHandle = xTimerCreate("Timer", pdMS_TO_TICKS(6000), pdTRUE, ( void * ) 0, vTimerCallback);
+  //blinkyTimerHandle = xTimerCreate("Timer", pdMS_TO_TICKS(6000), pdTRUE, ( void * ) 0, vTimerCallback);
 
   vTaskStartScheduler();
 }
