@@ -214,10 +214,10 @@ flash: $(BUILD_DIR)/$(TARGET).bin
 # run: 1) gdbserver 2) debug
 #######################################
 gdbserver:
-	$(OOCD) -f Core/stm32f4discovery.cfg
+	$(OOCD) -f Core/Debug/stm32f4discovery.cfg
 
 debug:
-	$(DBG) -x Core/script.gdb $(BUILD_DIR)/$(TARGET).elf
+	$(DBG) -x Core/Debug/script.gdb $(BUILD_DIR)/$(TARGET).elf
 
 #######################################
 # clean up
