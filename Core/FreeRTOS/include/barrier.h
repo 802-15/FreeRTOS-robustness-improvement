@@ -68,6 +68,7 @@ typedef struct barrierHandle
  * <pre>
  * BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFunc_t pvFailureFunction_t, TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask );
  * </pre>
+ *
  * Create a barrier for task instances synchronization. The barrier
  * instance consits of a mutex, counting semaphore, state variable and two
  * counter variables. An additional timer is created for reseting the task
@@ -97,6 +98,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFu
  * <pre>
  * void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
  * </pre>
+ *
  * Simple barrier synchronization using existing FreeRTOS objects. Once a thread
  * calls this function it will not resume execution until other threads have
  * called it too. The threads will exit the barrier one by one, in a turnstyle
@@ -116,6 +118,7 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle );
  * <pre>
  * void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
  * </pre>
+ *
  * Signal the barrier and release the waiting threads. This is done by
  * giving the sempahore and setting the barrier flag to unused (pdFALSE) state.
  *
@@ -128,8 +131,26 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
 /**
  * barrier.h
  * <pre>
+ * BaseType_t xBarrierGetState ( barrierHandle_t * pxBarrierHandle );
+ * </pre>
+ *
+ * Get barrier state. Barrier state if active if there are threads
+ * waiting at the barrier.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ * @return pdTRUE is returned if the barrier is active, pdFALSE otherwise
+ *
+ */
+BaseType_t xBarrierGetState ( barrierHandle_t * pxBarrierHandle );
+
+/**
+ * barrier.h
+ * <pre>
  * void vBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  * </pre>
+ *
  * Destroy the barrier instance by deleting the semaphores, timers and freeing
  * the barrier structure.
  *

@@ -140,6 +140,18 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle )
     xSemaphoreGive( pxBarrierHandle->xBarrierSemaphore );
 }
 
+BaseType_t xBarrierGetState( barrierHandle_t * pxBarrierHandle )
+{
+    if ( pxBarrierHandle->uxFlag == pdTRUE && pxBarrierHandle->uxArriveCounter > 0 )
+    {
+        return pdTRUE;
+    }
+    else
+    {
+        return pdFALSE;
+    }
+}
+
 void vBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 {
     taskENTER_CRITICAL();
