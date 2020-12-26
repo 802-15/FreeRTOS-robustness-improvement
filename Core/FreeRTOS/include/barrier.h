@@ -128,7 +128,7 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
 /**
  * barrier.h
  * <pre>
- * BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
+ * void vBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  * </pre>
  * Destroy the barrier instance by deleting the semaphores, timers and freeing
  * the barrier structure.
@@ -136,11 +136,8 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
  * @param pxBarrierHandle Barrier handle is used to access the information
  * related to the barrier.
  *
- * @return pdPASS if the barrier was destroyed, otherwise an error code
- * defined in the file projdefs.h
- *
  */
-BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
+void vBarrierDestroy( barrierHandle_t * pxBarrierHandle );
 
 /**
  * barrier.h
@@ -151,9 +148,7 @@ BaseType_t xBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  * Callback function for the oneshot barrier "watchdog" timer.
  * This timer must ensure that the barrier will do the proper error
  * handling in case some or all threads do not make it to the barrier.
- * This function is called from the FreeRTOS timer daemon and it should
- * not result in changing the state of said task to 'blocked'.
- * Currently the timer will execute the failure handle and restart the task.
+ * This function is called from the FreeRTOS timer daemon.
  *
  * @param xTimer Timer handle to ensure the timer callback prototype conformity
  *

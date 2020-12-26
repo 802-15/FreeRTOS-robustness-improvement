@@ -984,7 +984,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         {
             if ( i == 0 )
             {
-                /* The first instance handle is statically allocated in the user application */
+                /* The first instance handle must be reached from the user application */
                 errorCode = xTaskCreateInstance( pxTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask );
                 if ( errorCode != pdPASS )
                     goto error_out;
@@ -996,7 +996,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             }
             else
             {
-                /* Other handles are allocated on the heap */
+                /* Other handles are only reachable from the kernel */
                 handle = pvPortMalloc( sizeof( TaskHandle_t ) );
                 if ( !handle )
                     goto error_out;
@@ -1020,7 +1020,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
 error_out:
         /* Clean up the resources */
-        xBarrierDestroy( pxBarrierHandle );
+        vBarrierDestroy( pxBarrierHandle );
         for( i = 1; pxRedundantTask->pxInstances[i] != NULL; i++ )
         {
             vTaskDelete( *pxRedundantTask->pxInstances[i] );
@@ -1458,18 +1458,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult )
     {
         /* This function must be called after one instance of the task has been
-         * finished. It depends on the task, but usually it replaces the delay.
-         * The FreeRTOS user must evaluate the appropriate place inside
-         * a task to call this function. Once called the function will run the next
-         * instance or evaluate the overall status of the task based on instance return
-         * values. The optional behaviour can be specified through the uxDelayTime parameter
-         * or if the callback function was set using vSetTaskFailureCallback.
-         *
-         * It is important to denote that this function must also be called on the place
-         * of failure of our task, with a possible delay and additional cleanup functions.
-         *
-         * The return value of this function can be used as a result of the overall
-         * arbitration procedure.
+         * finished or has failed executing. It will block the running instance
+         * until others have finished execution.
          */
         BaseType_t xReturn = pdPASS;
         BaseType_t i = 0;
@@ -1565,7 +1555,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         return xReturn;
     }
 
-    BaseType_t xTaskReset( TaskHandle_t xTaskToRestart )
+    BaseType_t xTaskReset( TaskHandle_t * xTaskToRestart )
     {
         /* This function attempts to restart the task by deleting and re-creating it. */
         TCB_t * currentTCB;
@@ -1575,16 +1565,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         UBaseType_t xTimeoutTicks = 0;
         uint32_t usStackSize = 0;
         void * pvParameters = NULL;
-        TaskHandle_t * handleAddr = NULL;
         TaskFunction_t pxTaskCode;
         TaskFailureFunction_t pvFailureFunc;
         BaseType_t xReturn = pdFAIL;
 
-        currentTCB = prvGetTCBFromHandle( xTaskToRestart );
+        currentTCB = prvGetTCBFromHandle( * xTaskToRestart );
 
         if ( !currentTCB->pxRedundantTask )
         {
-            taskEXIT_CRITICAL();
             return xReturn;
         }
 
@@ -1603,17 +1591,15 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         pxTaskCode = currentTCB->pxRedundantTask->pxTaskCode;
         pvFailureFunc = currentTCB->pxRedundantTask->pvFailureFunc;
 
-        handleAddr = &xTaskToRestart;
-
         /* Delete task thus terminating all the threads */
-        vTaskDelete( xTaskToRestart );
+        vTaskDelete( * xTaskToRestart );
 
         /* Create a new task with the same parameters */
-        xReturn = xTaskCreate( pxTaskCode, pcTaskName, usStackSize, pvParameters, uxTaskPriority, handleAddr, xTimeoutTicks );
+        xReturn = xTaskCreate( pxTaskCode, pcTaskName, usStackSize, pvParameters, uxTaskPriority, xTaskToRestart, xTimeoutTicks );
 
         /* Re-register the failure callback */
         if ( pvFailureFunc )
-            vTaskRegisterFailureCallback( * handleAddr, pvFailureFunc );
+            vTaskRegisterFailureCallback( * xTaskToRestart, pvFailureFunc );
 
         taskEXIT_CRITICAL();
         return xReturn;
@@ -1640,19 +1626,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             iterTCB = prvGetTCBFromHandle( xTaskToDelete );
             if ( iterTCB->pxRedundantTask && iterTCB->uxInstanceNum == 0 )
             {
-                /* Destroy the barrier once all the semaphores have been given */
-                #if ( INCLUDE_vTaskDelay == 1 )
-                {
-                    while ( xBarrierDestroy( iterTCB->pxRedundantTask->pxBarrierHandle ) != pdPASS )
-                    {
-                        vTaskDelay( 10 );
-                    }
-                }
-                #else
-                {
-                    while ( xBarrierDestroy( iterTCB->pxRedundantTask->pxBarrierHandle ) != pdPASS );
-                }
-                #endif /* INCLUDE_vTaskDelay */
+                vBarrierDestroy( iterTCB->pxRedundantTask->pxBarrierHandle );
             }
         #endif /* configUSE_TEMPORAL_REDUNDANCY */
 

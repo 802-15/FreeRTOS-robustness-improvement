@@ -465,7 +465,7 @@ typedef void (* TaskFailureFunction_t)( void );
  * @return Returns the success code of xTaskCreate
  *
  * */
-    BaseType_t xTaskReset( TaskHandle_t xTaskToRestart );
+    BaseType_t xTaskReset( TaskHandle_t * xTaskToRestart );
 
 /**
  * task.h
