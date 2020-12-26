@@ -258,9 +258,11 @@
         TickType_t xTimeoutTicks;                                   /*< Number of ticks until the task timer triggers the timeout callback */
         barrierHandle_t * pxBarrierHandle;                          /*< Points to the barrier used for instance synchronization ran from the 'xTaskInstanceDone' function */
         barrierHandle_t * pxSuspensionBarrierHandle;                /*< Points to the barrier used for instance synchronization inside the 'vTaskSuspend' function */
-        void ( * pvFailureHandle ) ( void );                        /*< The task failure function pointer. */
         TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
+        TaskFailureFunction_t pvFailureFunc;                        /*< The task failure function pointer. */
+        TaskFunction_t pxTaskCode;                                  /*< Pointer to the task code function */
         void * pvTaskParams;                                        /*< Pointer to parameters that can be passed between execution instances */
+        uint32_t usStackDepth;                                      /*< Store stack depth information for task restoration */
     } redundantTCB_t;
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
@@ -963,15 +965,17 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         if ( !pxRedundantTask )
             goto error_out;
 
-        pxRedundantTask->pvFailureHandle = NULL;
-        pxRedundantTask->pxBarrierHandle = NULL;
         pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
         pxRedundantTask->xTimeoutTicks = xTimeoutTicks;
+        pxRedundantTask->usStackDepth = usStackDepth;
+        pxRedundantTask->pvFailureFunc = NULL;
         pxRedundantTask->pvTaskParams = NULL;
+        pxRedundantTask->pxBarrierHandle = NULL;
         pxRedundantTask->pxSuspensionBarrierHandle = NULL;
+        pxRedundantTask->pxTaskCode = pxTaskCode;
 
         /* Initialize the barrier for task instance synchronization */
-        if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureHandle, xTimeoutTicks, pxCreatedTask ) != pdPASS || !pxBarrierHandle )
+        if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureFunc, xTimeoutTicks, pxCreatedTask ) != pdPASS || !pxBarrierHandle )
             goto error_out;
 
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
@@ -1383,7 +1387,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
 
     void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
-                                       void ( * pvFailureFunc ) (void) )
+                                       TaskFailureFunction_t pvFailureFunc )
     {
         /* Store pointer to redundant task failure function.
          * This function should perform some sort of error handling specified
@@ -1394,7 +1398,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         taskENTER_CRITICAL();
 
         pxCurrentInstanceTCB = prvGetTCBFromHandle( TaskHandle );
-        pxCurrentInstanceTCB->pxRedundantTask->pvFailureHandle = pvFailureFunc;
+        pxCurrentInstanceTCB->pxRedundantTask->pvFailureFunc = pvFailureFunc;
 
         /* Send failure function to barrier watchdog timer */
         if ( pxCurrentInstanceTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer )
@@ -1531,13 +1535,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         if ( !xReturn )
         {
             /* At least one of the instances has failed, run failure handle if registered */
-            if ( currentTCB->pxRedundantTask->pvFailureHandle )
+            if ( currentTCB->pxRedundantTask->pvFailureFunc )
             {
                 /* While running the failure callback the thread can be interrupted
                  * in favour of running other tasks (interrupts are required for normal
                  * scheduler operation) */
                 taskEXIT_CRITICAL();
-                currentTCB->pxRedundantTask->pvFailureHandle();
+                currentTCB->pxRedundantTask->pvFailureFunc();
                 taskENTER_CRITICAL();
             }
         }
@@ -1561,10 +1565,58 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         return xReturn;
     }
 
-    void vTaskReset( TaskHandle_t xTaskToRestart )
+    BaseType_t xTaskReset( TaskHandle_t xTaskToRestart )
     {
-        ( void ) xTaskToRestart;
-        return;
+        /* This function attempts to restart the task by deleting and re-creating it. */
+        TCB_t * currentTCB;
+        UBaseType_t x = 0;
+        char pcTaskName[configMAX_TASK_NAME_LEN];
+        UBaseType_t uxTaskPriority = 0;
+        UBaseType_t xTimeoutTicks = 0;
+        uint32_t usStackSize = 0;
+        void * pvParameters = NULL;
+        TaskHandle_t * handleAddr = NULL;
+        TaskFunction_t pxTaskCode;
+        TaskFailureFunction_t pvFailureFunc;
+        BaseType_t xReturn = pdFAIL;
+
+        currentTCB = prvGetTCBFromHandle( xTaskToRestart );
+
+        if ( !currentTCB->pxRedundantTask )
+        {
+            taskEXIT_CRITICAL();
+            return xReturn;
+        }
+
+        taskENTER_CRITICAL();
+
+        /* Copy the task name */
+        for( x = ( UBaseType_t ) 0; x < ( UBaseType_t ) configMAX_TASK_NAME_LEN; x++ )
+        {
+            pcTaskName[ x ] = currentTCB->pcTaskName[ x ];
+        }
+
+        uxTaskPriority = currentTCB->uxPriority;
+        xTimeoutTicks = currentTCB->pxRedundantTask->xTimeoutTicks;
+        usStackSize = currentTCB->pxRedundantTask->usStackDepth;
+        pvParameters = currentTCB->pxRedundantTask->pvTaskParams;
+        pxTaskCode = currentTCB->pxRedundantTask->pxTaskCode;
+        pvFailureFunc = currentTCB->pxRedundantTask->pvFailureFunc;
+
+        handleAddr = &xTaskToRestart;
+
+        /* Delete task thus terminating all the threads */
+        vTaskDelete( xTaskToRestart );
+
+        /* Create a new task with the same parameters */
+        xReturn = xTaskCreate( pxTaskCode, pcTaskName, usStackSize, pvParameters, uxTaskPriority, handleAddr, xTimeoutTicks );
+
+        /* Re-register the failure callback */
+        if ( pvFailureFunc )
+            vTaskRegisterFailureCallback( * handleAddr, pvFailureFunc );
+
+        taskEXIT_CRITICAL();
+        return xReturn;
     }
 
 #endif /* configUSE_TEMPORAL_REDUNDANCY */

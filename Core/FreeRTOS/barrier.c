@@ -39,7 +39,7 @@
 #include "task.h"
 
 
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, void ( * pvFailureFunc ) ( void ), TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask )
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFunction_t pvFailureFunc, TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask )
 {
     barrierHandle_t * pxBarrierHandle = NULL;
 
@@ -88,7 +88,7 @@ error_out:
     /* vSemaphoreDelete calls vPortFree eventually */
     vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
-    xTimerDelete( pxBarrierHandle->xBarrierTimer, 100 );
+    xTimerDelete( pxBarrierHandle->xBarrierTimer, 0 );
     vPortFree( pxBarrierHandle );
     pxBarrierHandle = NULL;
     return pdFREERTOS_ERRNO_ENOMEM;
@@ -185,6 +185,6 @@ void vBarrierTimerCallback( TimerHandle_t xTimer )
     /* With one or more threads blocked, reset the task */
     if ( xCallbackContainer->xTaskToReset )
     {
-        vTaskReset( * xCallbackContainer->xTaskToReset );
+        xTaskReset( * xCallbackContainer->xTaskToReset );
     }
 }

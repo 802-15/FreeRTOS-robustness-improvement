@@ -347,6 +347,11 @@ typedef enum
 
 #if ( ( configSUPPORT_DYNAMIC_ALLOCATION  == 1 ) && ( configUSE_TEMPORAL_REDUNDANCY == 1 ) )
 
+/*
+ * Defines the prototype to which task failure functions must conform to.
+ */
+typedef void (* TaskFailureFunction_t)( void );
+
 /**
  * task.h
  * <pre>
@@ -429,7 +434,7 @@ typedef enum
  * @param pvFailureFunc Pointer to the failure function
  * */
     void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
-                                       void ( *pvFailureFunc ) ( void ) );
+                                       TaskFailureFunction_t pvFailureFunc );
 
 /**
  * task.h
@@ -457,8 +462,10 @@ typedef enum
  *
  * @param taskHandle Restarting task handle
  *
+ * @return Returns the success code of xTaskCreate
+ *
  * */
-    void vTaskReset( TaskHandle_t xTaskToRestart );
+    BaseType_t xTaskReset( TaskHandle_t xTaskToRestart );
 
 /**
  * task.h
