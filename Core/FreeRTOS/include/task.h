@@ -350,7 +350,7 @@ typedef enum
 /*
  * Defines the prototype to which task failure functions must conform to.
  */
-typedef void (* TaskFailureFunction_t)( void );
+typedef void (* TaskFailureFunction_t ) ( void );
 
 /**
  * task.h
@@ -367,6 +367,12 @@ typedef void (* TaskFailureFunction_t)( void );
  * </pre>
  *
  * Create configTIME_REDUNDANT_INSTANCES taks to run seemingly in parallel.
+ * These tasks share the same priority and thus the time deticated to this
+ * task is sliced between the instances. The task operation must be handled
+ * by calling 'xTaskInstanceDone'. The only API change for this function
+ * is contained in the xTimeoutTicks parameter. The task instances
+ * should be completed before the timeout or the task will be reset.
+ *
  */
     BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
                             const char * const pcName,
@@ -384,11 +390,14 @@ typedef void (* TaskFailureFunction_t)( void );
  *                                 configSTACK_DEPTH_TYPE usStackDepth,
  *                                 void *pvParameters,
  *                                 UBaseType_t uxPriority,
- *                                 TaskHandle_t *pvCreatedTask);
+ *                                 TaskHandle_t *pvCreatedTask
+ *                               );
  * </pre>
+ *
  * This function is used to create a single non-redundant task instance for
  * private FreeRTOS tasks (e.g. software timer, idle task). These tasks are meant
  * to be run with a single instance.
+ *
  */
     BaseType_t xTaskCreateInstance( TaskFunction_t pxTaskCode,
                                     const char * const pcName,
@@ -400,28 +409,8 @@ typedef void (* TaskFailureFunction_t)( void );
 /**
  * task.h
  * <pre>
- * BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
- * </pre>
- *
- * Explicitly mark the end of one instance of the task.
- *
- * After this function has been called the current redundant task instance will
- * be suspended using vTaskSuspend(), and the execution of the other instance
- * will start. If both instances are finished, the execution result and count
- * are evaluated.
- *
- * @param uxExecResult This variable stores the task execution result for the current instance
- *
- * @return Returns the result of execution validation across all the instances. This return
- * value can be used to modify the future behaviour of the user application.
- * */
-    BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
-
-/**
- * task.h
- * <pre>
  * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
- *                                    void ( *pvFailureFunc ) ( void ) );
+ *                                    TaskFailureFunction_t pvFailureFunc );
  * </pre>
  *
  * Register failure function for a redundant task.
@@ -431,8 +420,10 @@ typedef void (* TaskFailureFunction_t)( void );
  *
  *
  * @param taskHandle Redundant task handle
- * @param pvFailureFunc Pointer to the failure function
- * */
+ *
+ * @param pvFailureFunc Pointer to the failure function.
+ *
+ */
     void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
                                        TaskFailureFunction_t pvFailureFunc );
 
@@ -442,30 +433,13 @@ typedef void (* TaskFailureFunction_t)( void );
  * BaseType_t xTaskGetInstanceNumber( void );
  * </pre>
  *
- * Return the instance number of the currently executing task. If the currently
- * executing task is not a redundant one, it will return 0. Used to pass instance
- * information back to the user application when needed. After returning this value
- * the instance number can be safely placed on the instance's stack.
+ * Returns the number of currently executing instance. If the currently
+ * executing task is not a redundant one, it will return -1.
  *
- * @return Returns the current instance number, or 0 if it is called from a
- * non-redundant task.
- * */
+ * @return Returns the current instance number or -1.
+ *
+ */
     BaseType_t xTaskGetInstanceNumber( void );
-
-/**
- * task.h
- * <pre>
- * void vTaskRestart( TaskHandle_t xTaskToRestart );
- * </pre>
- *
- * Restart the redundant task after barrier timeout
- *
- * @param taskHandle Restarting task handle
- *
- * @return Returns the success code of xTaskCreate
- *
- * */
-    BaseType_t xTaskReset( TaskHandle_t * xTaskToRestart );
 
 /**
  * task.h
@@ -473,14 +447,51 @@ typedef void (* TaskFailureFunction_t)( void );
  * void vTaskStoreData( TaskHandle_t TaskHandle, void * pvParameters );
  * </pre>
  *
- * Store task data.
+ * Store a pointer to some arbitrary task data that can be shared between
+ * task resets.
  *
  * @param TaskHandle Storing task handle
  *
  * @param pvParameters Pointer to data
  *
- **/
+ */
     void vTaskStoreData( TaskHandle_t TaskHandle, void * pvParameters );
+
+/**
+ * task.h
+ * <pre>
+ * BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
+ * </pre>
+ *
+ * Explicitly mark the end of one instance of the task. The instance
+ * can be set to the completed ('DONE') state by passing pdPASS or
+ * it can set to the failed state by passing any other integer. The redundant
+ * task threads will synchronize inside this function.
+ *
+ * @param uxExecResult This variable stores the task execution result for the
+ * current instance
+ *
+ * @return Returns the result of execution validation across all the instances.
+ * This return value can be used to modify the future behaviour of the user application.
+ *
+ */
+    BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
+
+/**
+ * task.h
+ * <pre>
+ * void vTaskRestart( TaskHandle_t xTaskToRestart );
+ * </pre>
+ *
+ * Restart the redundant task after barrier timeout. The task will be
+ * deleted and created again.
+ *
+ * @param taskHandle Restarting task handle
+ *
+ * @return Returns the success code of xTaskCreate
+ *
+ */
+    BaseType_t xTaskReset( TaskHandle_t * xTaskToRestart );
 
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
 
