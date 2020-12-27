@@ -281,8 +281,10 @@
      * For more insight visit: http://www.nadler.com/embedded/newlibAndFreeRTOS.html
      */
     #if defined(__GNUC__)
-        #define configUSE_NEWLIB_REENTRANT 1
-    #endif
+        #ifndef configUSE_NEWLIB_REENTRANT
+            #define configUSE_NEWLIB_REENTRANT 1
+        #endif /* configUSE_NEWLIB_REENTRANT */
+    #endif /* __GNUC__ */
 
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
