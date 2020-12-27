@@ -120,7 +120,8 @@ void vBarrierEnter( barrierHandle_t * pxBarrierHandle )
     {
         /* The last thread will leave the barrier and signal the rest of the threads externally */
         pxBarrierHandle->uxArriveCounter--;
-        xTimerStop( pxBarrierHandle->xBarrierTimer, 0 );
+        if ( pxBarrierHandle->xBarrierTimer )
+            xTimerStop( pxBarrierHandle->xBarrierTimer, 0 );
     }
     else
     {

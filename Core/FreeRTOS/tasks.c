@@ -257,7 +257,7 @@
         UBaseType_t uxTaskState;                                    /*< Redundant task state (global) */
         TickType_t xTimeoutTicks;                                   /*< Number of ticks until the task timer triggers the timeout callback */
         barrierHandle_t * pxBarrierHandle;                          /*< Points to the barrier used for instance synchronization ran from the 'xTaskInstanceDone' function */
-        barrierHandle_t * pxSuspensionBarrierHandle;                /*< Points to the barrier used for instance synchronization inside the 'vTaskSuspend' function */
+        barrierHandle_t * pxSuspendBarrierHandle;                   /*< Points to the barrier used for instance synchronization inside the 'vTaskSuspend' function */
         TaskHandle_t * pxInstances[configTIME_REDUNDANT_INSTANCES]; /*< Array with pointers to other instances of the same task */
         TaskFailureFunction_t pvFailureFunc;                        /*< The task failure function pointer. */
         TaskFunction_t pxTaskCode;                                  /*< Pointer to the task code function */
@@ -971,7 +971,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         pxRedundantTask->pvFailureFunc = NULL;
         pxRedundantTask->pvTaskParams = NULL;
         pxRedundantTask->pxBarrierHandle = NULL;
-        pxRedundantTask->pxSuspensionBarrierHandle = NULL;
+        pxRedundantTask->pxSuspendBarrierHandle = NULL;
         pxRedundantTask->pxTaskCode = pxTaskCode;
 
         /* Initialize the barrier for task instance synchronization */
@@ -1020,12 +1020,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
 error_out:
         /* Clean up the resources */
-        vBarrierDestroy( pxBarrierHandle );
-        for( i = 0; pxRedundantTask->pxInstances[i] != NULL; i++ )
-        {
-            vTaskDelete( *pxRedundantTask->pxInstances[i] );
-        }
+        vTaskDelete( * pxCreatedTask );
         vPortFree( pxRedundantTask );
+        vBarrierDestroy( pxBarrierHandle );
 
 out:
         taskEXIT_CRITICAL();
@@ -1643,12 +1640,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         {
                             iterTCB = * xTaskToDelete->pxRedundantTask->pxInstances[i];
                         }
-                        vTaskDelete( iterTCB );
+                        if ( iterTCB )
+                            vTaskDelete( iterTCB );
                     }
 
                     /* Clean up the redundant task control block and the barrier */
                     vBarrierDestroy( pxTCB->pxRedundantTask->pxBarrierHandle );
-                    vBarrierDestroy( pxTCB->pxRedundantTask->pxSuspensionBarrierHandle );
+                    vBarrierDestroy( pxTCB->pxRedundantTask->pxSuspendBarrierHandle );
                     vPortFree( pxTCB->pxRedundantTask );
 
                     /* Delete the original task instance pxTCB */
