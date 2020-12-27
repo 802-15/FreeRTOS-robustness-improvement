@@ -352,6 +352,11 @@ typedef enum
  */
 typedef void (* TaskFailureFunction_t ) ( void );
 
+/*
+ * Generic task API prototype
+ */
+typedef void (* TaskAPICode_t ) ( TaskHandle_t );
+
 /**
  * task.h
  * <pre>
@@ -405,6 +410,24 @@ typedef void (* TaskFailureFunction_t ) ( void );
                                     void * const pvParameters,
                                     UBaseType_t uxPriority,
                                     TaskHandle_t * const pxCreatedTask ) PRIVILEGED_FUNCTION;
+
+/**
+ * task.h
+ * <pre>
+ * void vTaskCallAPISynchronized( TaskHandle_t TaskHandle,
+ *                                TaskAPICode_t TaskCode );
+ * </pre>
+ *
+ * Call a FreeRTOS API function with a single thread and block all
+ * other threads using the barrier.
+ *
+ * @param TaskHandle Redundant task handle
+ *
+ * @param TaskCode Function pointer, eg. vTaskSuspend or vTaskReset
+ *
+ */
+    void vTaskCallAPISynchronized( TaskHandle_t TaskHandle,
+                                   TaskAPICode_t TaskCode );
 
 /**
  * task.h

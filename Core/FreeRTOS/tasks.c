@@ -955,10 +955,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         TaskHandle_t * handle = NULL;
         redundantTCB_t * pxRedundantTask = NULL;
         barrierHandle_t * pxBarrierHandle = NULL;
+        barrierHandle_t * pxSuspendBarrierHandle = NULL;
 
         if ( xTaskGetInstanceNumber() > 0 )
         {
-             return;
+             return pdFAIL;
         }
 
         taskENTER_CRITICAL();
@@ -989,7 +990,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureFunc, xTimeoutTicks, pxCreatedTask ) != pdPASS || !pxBarrierHandle )
             goto error_out;
 
+        if ( xBarrierCreate( &pxSuspendBarrierHandle, NULL, 0, NULL ) != pdPASS || !pxSuspendBarrierHandle )
+            goto error_out;
+
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
+        pxRedundantTask->pxSuspendBarrierHandle = pxSuspendBarrierHandle;
 
         for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
         {
@@ -1034,6 +1039,7 @@ error_out:
         vTaskDelete( * pxCreatedTask );
         vPortFree( pxRedundantTask );
         vBarrierDestroy( pxBarrierHandle );
+        vBarrierDestroy( pxSuspendBarrierHandle );
 
 out:
         taskEXIT_CRITICAL();
@@ -1394,6 +1400,39 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 /*-----------------------------------------------------------*/
 #if ( configUSE_TEMPORAL_REDUNDANCY == 1 )
 
+    void vTaskCallAPISynchronized( TaskHandle_t TaskHandle,
+                                   TaskAPICode_t TaskCode )
+    {
+        /* Synchronize threads while calling an API function like vTaskSuspend() */
+        if ( !pxCurrentTCB->pxRedundantTask )
+            return;
+
+        if ( xTaskGetInstanceNumber() > 0)
+        {
+            vBarrierEnter( pxCurrentTCB->pxRedundantTask->pxSuspendBarrierHandle );
+        }
+        else
+        {
+            /* Block the first until other threads have reached the barrier */
+            while ( pxCurrentTCB->pxRedundantTask->pxSuspendBarrierHandle->uxArriveCounter < configTIME_REDUNDANT_INSTANCES - 1 )
+            {
+                #if ( INCLUDE_vTaskDelay == 1 )
+                    vTaskDelay( 10 );
+                #else
+                    continue;
+                #endif
+            }
+            vBarrierEnter( pxCurrentTCB->pxRedundantTask->pxSuspendBarrierHandle );
+        }
+
+        if ( pxCurrentTCB->pxRedundantTask->pxSuspendBarrierHandle->uxFlag == pdFALSE )
+            return;
+
+        TaskCode( TaskHandle );
+
+        vBarrierSignal( pxCurrentTCB->pxRedundantTask->pxSuspendBarrierHandle );
+    }
+
     void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
                                        TaskFailureFunction_t pvFailureFunc )
     {
@@ -1429,15 +1468,27 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     {
         /* Enables the user application to get information on the currently executing
          * task instance by returning its number. Returns -1 if the task is not redundant.
+         * Can be used to ensure some kernel functions are executed only once.
          */
         UBaseType_t currentInstanceNum = -1;
         TaskHandle_t currentTaskInstance = NULL;
         TCB_t * currentTCB = NULL;
 
+        if ( xTaskGetSchedulerState() != taskSCHEDULER_RUNNING )
+        {
+            return currentInstanceNum;
+        }
+
         taskENTER_CRITICAL();
 
         currentTaskInstance = xTaskGetCurrentTaskHandle();
         currentTCB = prvGetTCBFromHandle( currentTaskInstance );
+
+        if ( currentTaskInstance == NULL )
+        {
+            taskEXIT_CRITICAL();
+            return currentInstanceNum;
+        }
 
         if ( currentTCB->pxRedundantTask )
             currentInstanceNum = currentTCB->uxInstanceNum;
@@ -1588,7 +1639,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         /* Return if the calling thread is not the first task instance thread */
         if ( xTaskGetInstanceNumber() > 0 )
         {
-            return;
+            return pdFAIL;
         }
 
         if ( !currentTCB->pxRedundantTask )
