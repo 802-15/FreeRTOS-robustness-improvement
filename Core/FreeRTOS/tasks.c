@@ -856,6 +856,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         TCB_t * pxNewTCB;
         BaseType_t xReturn;
 
+        /* Return if the calling thread is not the first task instance thread */
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+            return pdFAIL;
+        }
+
         /* If the stack grows down then allocate the stack then the TCB so the stack
          * does not grow into the TCB.  Likewise if the stack grows up then allocate
          * the TCB then the stack. */
@@ -949,6 +955,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         TaskHandle_t * handle = NULL;
         redundantTCB_t * pxRedundantTask = NULL;
         barrierHandle_t * pxBarrierHandle = NULL;
+
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+             return;
+        }
 
         taskENTER_CRITICAL();
 
@@ -1392,6 +1403,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
          */
         TCB_t * pxCurrentInstanceTCB = NULL;
 
+        /* Return if the calling thread is not the first task instance thread */
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+            return;
+        }
+
         taskENTER_CRITICAL();
 
         pxCurrentInstanceTCB = prvGetTCBFromHandle( TaskHandle );
@@ -1567,6 +1584,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         BaseType_t xReturn = pdFAIL;
 
         currentTCB = prvGetTCBFromHandle( * xTaskToRestart );
+
+        /* Return if the calling thread is not the first task instance thread */
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+            return;
+        }
 
         if ( !currentTCB->pxRedundantTask )
             return xReturn;
@@ -1875,6 +1898,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         eTaskState eReturn;
         List_t const * pxStateList, * pxDelayedList, * pxOverflowedDelayedList;
         const TCB_t * const pxTCB = xTask;
+
+        #if ( configUSE_TEMPORAL_REDUNDANCY == 1)
+            /* Return if the calling thread is not the first task instance thread */
+            if ( xTaskGetInstanceNumber() > 0 )
+            {
+                return;
+            }
+        #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
         configASSERT( pxTCB );
 
