@@ -86,11 +86,13 @@ CC = $(GCC_PATH)/$(PREFIX)gcc
 AS = $(GCC_PATH)/$(PREFIX)gcc -x assembler-with-cpp
 CP = $(GCC_PATH)/$(PREFIX)objcopy
 SZ = $(GCC_PATH)/$(PREFIX)size
+OB = $(GCC_PATH)/$(PREFIX)objdump
 else
 CC = $(PREFIX)gcc
 AS = $(PREFIX)gcc -x assembler-with-cpp
 CP = $(PREFIX)objcopy
 SZ = $(PREFIX)size
+OB = $(PREFIX)objdump
 endif
 HEX = $(CP) -O ihex
 BIN = $(CP) -O binary -S
@@ -100,12 +102,11 @@ BIN = $(CP) -O binary -S
 #######################################
 ifdef GCC_PATH
 DBG = $(GCC_PATH)/$(PREFIX)gdb
-OOCD = $(GCC_PATH)/openocd
 else
 DBG = $(PREFIX)gdb
-OOCD = openocd
 endif
 
+OOCD = openocd
 #######################################
 # CFLAGS
 #######################################
@@ -193,6 +194,7 @@ $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 	$(SZ) $@
+	$(OB) -D $@ > $(BUILD_DIR)/$(TARGET).dump
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(HEX) $< $@
