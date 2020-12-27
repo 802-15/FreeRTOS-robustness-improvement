@@ -154,6 +154,9 @@ BaseType_t xBarrierGetState( barrierHandle_t * pxBarrierHandle )
 
 void vBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 {
+    if ( !pxBarrierHandle )
+        return;
+
     taskENTER_CRITICAL();
 
     if ( pxBarrierHandle->xBarrierTimer )
@@ -172,6 +175,7 @@ void vBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 
 void vBarrierTimerCallback( TimerHandle_t xTimer )
 {
+    BaseType_t errorCode;
     callbackContainer_t * xCallbackContainer = NULL;
 
     xCallbackContainer = ( callbackContainer_t * ) pvTimerGetTimerID( xTimer );
@@ -186,8 +190,10 @@ void vBarrierTimerCallback( TimerHandle_t xTimer )
     /* With one or more threads blocked, reset the task */
     if ( xCallbackContainer->xTaskToReset )
     {
-        xTaskReset( xCallbackContainer->xTaskToReset );
+        errorCode = xTaskReset( xCallbackContainer->xTaskToReset );
     }
 
+    /* Task reset should never fail since the same memory gets reallocated immediately */
+    ( void ) errorCode;
     taskEXIT_CRITICAL();
 }
