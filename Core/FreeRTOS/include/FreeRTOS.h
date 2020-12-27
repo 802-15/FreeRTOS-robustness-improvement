@@ -277,6 +277,13 @@
         #define configTIME_REDUNDANT_INSTANCES 2
     #endif
 
+    /* Depending on the toolchain onfigUSE_NEWLIB_REENTRANT should be used.
+     * For more insight visit: http://www.nadler.com/embedded/newlibAndFreeRTOS.html
+     */
+    #if defined(__GNUC__)
+        #define configUSE_NEWLIB_REENTRANT 1
+    #endif
+
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
 #if configMAX_TASK_NAME_LEN < 1
