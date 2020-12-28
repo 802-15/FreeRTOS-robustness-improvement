@@ -500,3 +500,17 @@ void vPortGetHeapStats( HeapStats_t * pxHeapStats )
     }
     taskEXIT_CRITICAL();
 }
+
+#if ( ( configUSE_TEMPORAL_REDUNDANCY == 1 ) && ( configUSE_MALLOC_FAILED_HOOK == 1 ) )
+
+    void vApplicationMallocFailedHook( void )
+    {
+        /* If pvPortMalloc fails this function will be triggered.
+         * The functions should block interrupts and wait for the
+         * user to connect with the debugger.
+         */
+        portDISABLE_INTERRUPTS();
+        for( ;; );
+    }
+
+#endif

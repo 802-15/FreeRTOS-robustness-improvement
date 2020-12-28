@@ -267,9 +267,12 @@
         #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configENABLE_MPU == 0 must also be set.
     #endif
 
-    /* Timer task priority does not need to be set too high in this usage scenario */
     #if configUSE_TIMERS == 0
         #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configUSE_TIMERS == 1 must also be set.
+    #endif
+
+    #if configUSE_MUTEXES == 0
+        #error If configUSE_TEMPORAL_REDUNDANCY is set to 1 then configUSE_MUTEXES == 1 must also be set.
     #endif
 
     /* Set up default values for number of instances */

@@ -247,7 +247,6 @@
 #endif
 
 /**
- * task. h
  * Redundant task control block stores the global information for the redundant task.
  * This structure must be exposed for the barrier creation function.
  */
