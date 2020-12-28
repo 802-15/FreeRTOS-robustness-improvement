@@ -19,7 +19,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -46,8 +45,8 @@ char messageBuffer[256];
 /* USER CODE BEGIN PM */
 
 #define SERIAL_PRINT(FORMAT,...) \
-snprintf ( messageBuffer, sizeof(messageBuffer), FORMAT "\r\n", ##__VA_ARGS__ ); \
-USART1_SendString(messageBuffer);
+  lightFormat(messageBuffer, FORMAT "\r\n", ##__VA_ARGS__ ); \
+  USART1_SendString(messageBuffer);
 
 /* USER CODE END PM */
 
@@ -71,15 +70,18 @@ void SystemClock_Config(void);
 
  void vTimerCallback(TimerHandle_t xTimer)
  {
-   xTimerStop(xTimer, 0);
-   /* Resume the blinky task from timer callback */
-   vTaskResume(blinkyHandle);
+  xTimerStop(xTimer, 0);
+
+  /* Resume the blinky task from timer callback */
+
+  SERIAL_PRINT("Unblocking task!");
+  vTaskResume(blinkyHandle);
  }
 
 void blinkyFailureTest(void)
 {
   /* Dummy failure function that blinks the leds.
-     This function will only be executed by the first thread that exits the barrier! */
+     This function will be executed by a single thread. */
   const TickType_t xDelay = 200/portTICK_RATE_MS;
   int blinkTimes = 10;
 
@@ -99,6 +101,7 @@ void blinkyFailureTest(void)
     vTaskDelay(xDelay);
     blinkTimes--;
   }
+  SERIAL_PRINT("Done running failure handle!");
 }
 
 static void blinkTask(void *pvParameters)
@@ -111,7 +114,7 @@ static void blinkTask(void *pvParameters)
   const TickType_t xDelay = 1000/portTICK_RATE_MS;
 
   /* Get the running instance number and store it on the instance stack */
-  const BaseType_t instanceNumber = xTaskGetInstanceNumber();
+  BaseType_t instanceNumber = xTaskGetInstanceNumber();
 
   while (1) {
 
@@ -135,17 +138,11 @@ static void blinkTask(void *pvParameters)
 
     vTaskDelay(xDelay);
 
-    /* Test scenario: block a single thread and prevent it from reaching the barrier. */
-    if ( instanceNumber == 2 ) {
-      while(1);
-    }
-
-    /* Task instance is finished, purposefully pass differing exit codes
-     * to trigger the failure handle. */
+    SERIAL_PRINT("Instance %d done", instanceNumber);
     xTaskInstanceDone( instanceNumber );
 
-    //xTimerStart(blinkyTimerHandle, 0);
-    //vTaskSuspend( blinkyHandle );
+    xTimerReset(blinkyTimerHandle, 0);
+    vTaskCallAPISynchronized( blinkyHandle, vTaskSuspend );
   }
 }
 
@@ -161,14 +158,13 @@ int main(void)
   HAL_Init();
   SystemClock_Config();
   MX_GPIO_Init();
-  MX_DMA_Init();
   HAL_UART_MspInit(&huart1);
   MX_USART1_UART_Init();
 
   SERIAL_PRINT(INIT_MSG);
 
   /* Create a simple blinky demonstration task */
-  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-2, &blinkyHandle, pdMS_TO_TICKS(8000));
+  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-2, &blinkyHandle, pdMS_TO_TICKS(5000));
   if (error <= 0) {
     while(1);
   }
@@ -177,7 +173,7 @@ int main(void)
   vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
 
   /* Task unblock timer */
-  //blinkyTimerHandle = xTimerCreate("Timer", pdMS_TO_TICKS(6000), pdTRUE, ( void * ) 0, vTimerCallback);
+  blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
 
   vTaskStartScheduler();
 }

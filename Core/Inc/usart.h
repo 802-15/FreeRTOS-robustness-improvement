@@ -30,6 +30,7 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 
 #include <string.h>
+#include <xformatc.h>
 #include <stm32f4xx_hal_uart.h>
 
 /* USER CODE END Includes */
