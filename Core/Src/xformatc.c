@@ -1033,5 +1033,3 @@ void lightFormat(char * buffer, const char * fmt,...)
 }
 
 /*lint -restore */
-
-

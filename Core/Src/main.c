@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 /* USER CODE END Includes */
 
@@ -67,6 +68,16 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void * __real_malloc(size_t size);
+void * __wrap_malloc(size_t size)
+{
+  /* Prevent user's application from ever calling malloc while using FreeRTOS
+   * with newlib. */
+  (void) size;
+  SERIAL_PRINT("malloc was called from the application, stopping...");
+  for(;;);
+}
 
  void vTimerCallback(TimerHandle_t xTimer)
  {
