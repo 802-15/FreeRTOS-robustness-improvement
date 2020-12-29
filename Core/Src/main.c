@@ -21,6 +21,7 @@
 #include "main.h"
 #include "usart.h"
 #include "gpio.h"
+#include "memory_wrappers.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -68,16 +69,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void * __real_malloc(size_t size);
-void * __wrap_malloc(size_t size)
-{
-  /* Prevent user's application from ever calling malloc while using FreeRTOS
-   * with newlib. */
-  (void) size;
-  SERIAL_PRINT("malloc was called from the application, stopping...");
-  for(;;);
-}
 
  void vTimerCallback(TimerHandle_t xTimer)
  {
