@@ -47,7 +47,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFu
     if ( xTimeoutTicks != 0 && !pxCreatedTask )
         goto error_out;
 
-    pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) + 2 * sizeof( SemaphoreHandle_t ) + sizeof( TimerHandle_t ) );
+    pxBarrierHandle = pvPortMalloc( sizeof( barrierHandle_t ) );
     if ( !pxBarrierHandle )
         return pdFREERTOS_ERRNO_ENOMEM;
 
