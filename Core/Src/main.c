@@ -18,15 +18,13 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include "application.h"
 #include "main.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
-#include <stdio.h>
-#include <stdlib.h>
 
 /* USER CODE END Includes */
 
@@ -38,27 +36,16 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-char messageBuffer[256];
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
-#define SERIAL_PRINT(FORMAT,...) \
-  lightFormat(messageBuffer, FORMAT "\r\n", ##__VA_ARGS__ ); \
-  USART1_SendString(messageBuffer);
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
-int bss_variable;
-
-TaskHandle_t  blinkyHandle;
-TimerHandle_t blinkyTimerHandle;
 
 /* USER CODE END PV */
 
@@ -71,6 +58,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+<<<<<<< HEAD
 static void test_malloc(void)
 {
   char * allocated = NULL;
@@ -207,15 +195,20 @@ static void blinkTask(void *pvParameters)
   }
 }
 
+=======
+>>>>>>> 3fc3613 (add Kalman filter demo application)
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
+<<<<<<< HEAD
   int error = 0;
   TaskFailureHandles_t xFailureHandles = {0};
 
+=======
+>>>>>>> 3fc3613 (add Kalman filter demo application)
   /* Start up the peripherals */
   HAL_Init();
   SystemClock_Config();
@@ -223,6 +216,7 @@ int main(void)
   HAL_UART_MspInit(&huart1);
   MX_USART1_UART_Init();
 
+<<<<<<< HEAD
   SERIAL_PRINT(INIT_MSG);
 
   /* Create a simple blinky demonstration task */
@@ -240,6 +234,10 @@ int main(void)
   blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
 
   vTaskStartScheduler();
+=======
+  /* Start up the demo application */
+  application_init();
+>>>>>>> 3fc3613 (add Kalman filter demo application)
 }
 
 /* USER CODE END 0 */

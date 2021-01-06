@@ -59,7 +59,11 @@ Core/Src/system_stm32f4xx.c \
 Core/Src/gpio.c \
 Core/Src/usart.c \
 Core/Src/memory_wrappers.c \
-Core/Src/xformatc.c
+Core/Src/xformatc.c \
+Core/Src/matrix.c \
+Core/Src/kalman.c \
+Core/Src/kalman_data.c \
+Core/Src/application.c
 
 FREERTOS_SOURCES = \
 Core/FreeRTOS/barrier.c \

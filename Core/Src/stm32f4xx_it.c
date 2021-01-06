@@ -138,7 +138,8 @@ void UsageFault_Handler(void)
     /* USER CODE END W1_UsageFault_IRQn 0 */
   }
 }
-#ifndef INC_FREERTOS_H
+
+#if 0
 /**
   * Override CubeMX HAL interrupt handlers using CMSIS interrupt handler names.
   * The new handlers will be set to FreeRTOS port level interrupt handlers.
@@ -157,6 +158,7 @@ void SVC_Handler(void)
   /* USER CODE END SVCall_IRQn 1 */
 }
 #endif
+
 /**
   * @brief This function handles Debug monitor.
   */
@@ -169,7 +171,8 @@ void DebugMon_Handler(void)
 
   /* USER CODE END DebugMonitor_IRQn 1 */
 }
-#ifndef INC_FREERTOS_H
+
+#if 0
 /**
   * Override CubeMX HAL interrupt handlers using CMSIS interrupt handler names.
   * The new handlers will be set to FreeRTOS port level interrupt handlers.
@@ -202,6 +205,7 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 1 */
 }
 #endif
+
 /******************************************************************************/
 /* STM32F4xx Peripheral Interrupt Handlers                                    */
 /* Add here the Interrupt Handlers for the used peripherals.                  */
