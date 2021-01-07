@@ -63,9 +63,7 @@ void user_free(void * ptr)
     }
 }
 
-#endif
-
-#if ( USE_MALLOC == 1 )
+#else
 
 /* Use newlib's memory management scheme. Wrap the newlib malloc/free
  * in a critical section to provide thread safety. Provide a minimal
@@ -109,13 +107,13 @@ void * _sbrk(int incr)
 
     taskENTER_CRITICAL();
 
-    static char *heap_end;
     static char *heap_start;
+    static char *heap_end;
     char *prev_heap_end;
 
     if (heap_end == 0) {
-        heap_end = &_end;
         heap_start = &_end;
+        heap_end = &_end;
     }
 
     prev_heap_end = heap_end;
@@ -151,4 +149,4 @@ void __malloc_unlock(struct _reent *r)
     taskEXIT_CRITICAL();
 }
 
-#endif
+#endif /* USE_MALLOC */
