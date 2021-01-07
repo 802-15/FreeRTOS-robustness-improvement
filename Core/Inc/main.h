@@ -36,6 +36,7 @@ extern "C" {
 #include <FreeRTOS.h>
 #include <task.h>
 #include <timers.h>
+#include "memory_wrappers.h"
 
 /* USER CODE END Includes */
 

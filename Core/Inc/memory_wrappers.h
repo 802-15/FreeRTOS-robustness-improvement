@@ -1,5 +1,5 @@
 /*
- * Wrappers for FreeRTOS malloc and free
+ * Wrappers for malloc and free
  * Copyright © 2020, Mario Senecic
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,11 +32,28 @@
 #ifndef __MEMORY_WRAPPERS_H
 #define __MEMORY_WRAPPERS_H
 
-#include <stdlib.h>
+/* Select using possibly non deterministic newlib malloc/free scheme
+ * versus FreeRTOS heap located in the BSS static array */
+#define USE_MALLOC 1
 
+/* This must match the heap part of the '_user_heap_stack' in the linker script */
+#define HEAP_MAX_SIZE 0x8000
+
+#if ( USE_MALLOC == 1 )
+
+#include <stdlib.h>
+#include <FreeRTOS.h>
+#include <task.h>
+
+#else
+
+#include <stdlib.h>
 #include <FreeRTOS.h>
 #include <portable.h>
 
+#endif
+
+/* Use these functions in the application layer to provide dynamic memory management */
 void * user_malloc(size_t size);
 void user_free(void * ptr);
 

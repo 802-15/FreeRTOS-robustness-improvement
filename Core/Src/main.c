@@ -21,7 +21,6 @@
 #include "main.h"
 #include "usart.h"
 #include "gpio.h"
-#include "memory_wrappers.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -56,6 +55,8 @@ char messageBuffer[256];
 
 /* USER CODE BEGIN PV */
 
+int bss_variable;
+
 TaskHandle_t  blinkyHandle;
 TimerHandle_t blinkyTimerHandle;
 
@@ -70,7 +71,39 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
- void vTimerCallback(TimerHandle_t xTimer)
+static void test_malloc(void)
+{
+  char * allocated = NULL;
+
+  /*
+   * Call this function before and after the scheduler was
+   * started to make sure the memory allocation scheme is working.
+   */
+
+  allocated = user_malloc(sizeof(char));
+  memset(allocated, 0, sizeof(char));
+
+  #if ( USE_MALLOC == 1 )
+    /* Test out linker heap */
+    if ( &bss_variable >= (int *) allocated) {
+      SERIAL_PRINT("Linker heap failed!");
+      while(1);
+    } else {
+      SERIAL_PRINT("Linker heap working!");
+    }
+  #else
+    /* Test the FreeRTOS heap in the application layer */
+    if (&bss_variable >= (int *) allocated) {
+      SERIAL_PRINT("FreeRTOS heap failed!");
+      while(1);
+    } else {
+      SERIAL_PRINT("FreeRTOS heap working!");
+    }
+  #endif
+  user_free(allocated);
+}
+
+void vTimerCallback(TimerHandle_t xTimer)
  {
   xTimerStop(xTimer, 0);
 
@@ -114,6 +147,8 @@ static void blinkTask(void *pvParameters)
    */
   (void) pvParameters;
   const TickType_t xDelay = 1000/portTICK_RATE_MS;
+
+  test_malloc();
 
   /* Get the running instance number and store it on the instance stack */
   BaseType_t instanceNumber = xTaskGetInstanceNumber();
