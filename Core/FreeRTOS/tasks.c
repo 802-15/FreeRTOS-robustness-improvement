@@ -1661,7 +1661,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         pvFailureFunc = currentTCB->pxRedundantTask->pvFailureFunc;
 
         /* Delete task thus terminating all the threads */
+        taskEXIT_CRITICAL();
         vTaskDelete( * xTaskToRestart );
+        taskENTER_CRITICAL();
 
         /* Create a new task with the same parameters */
         xReturn = xTaskCreate( pxTaskCode, pcTaskName, usStackSize, pvParameters, uxTaskPriority, xTaskToRestart, xTimeoutTicks );
@@ -1713,8 +1715,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         {
                             iterTCB = * xTaskToDelete->pxRedundantTask->pxInstances[i];
                         }
-                        if ( iterTCB )
+                        if ( iterTCB ) {
+                            taskEXIT_CRITICAL();
                             vTaskDelete( iterTCB );
+                            taskENTER_CRITICAL();
+                        }
                     }
 
                     /* Clean up the redundant task control block and the barrier */
@@ -2161,7 +2166,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         }
                         /* Set the other instance priorities. Since critical sections nest,
                         * the functions will be recursively called for each instance without interrupts. */
+                        taskEXIT_CRITICAL();
                         vTaskPrioritySet( iterTCB, uxNewPriority );
+                        taskENTER_CRITICAL();
                     }
                 }
                 /* Proceed with setting up priority for the original instance (pxTCB) */
@@ -2344,7 +2351,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                             iterTCB = *xTaskToSuspend->pxRedundantTask->pxInstances[i];
                         }
                         /* Suspend each of the instances */
+                        taskEXIT_CRITICAL();
                         vTaskSuspend( iterTCB );
+                        taskENTER_CRITICAL();
                     }
                 }
                 /* Suspend the initial instance */
@@ -2528,7 +2537,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                                 iterTCB = *xTaskToResume->pxRedundantTask->pxInstances[i];
                             }
                             /* Resume each of the instances */
+                            taskEXIT_CRITICAL();
                             vTaskResume( iterTCB );
+                            taskENTER_CRITICAL();
                         }
                         /* Restart the instance state synchronization barrier timer */
                         xTimerReset( pxTCB->pxRedundantTask->pxBarrierHandle->xBarrierTimer, 0 );
