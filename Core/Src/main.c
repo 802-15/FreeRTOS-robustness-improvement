@@ -19,6 +19,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "can.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -216,6 +217,11 @@ int main(void)
 }
 
 /* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
 
 /**
   * @brief System Clock Configuration
