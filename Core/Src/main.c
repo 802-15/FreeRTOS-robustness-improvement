@@ -213,15 +213,13 @@ int main(void)
   /* Task unblock timer */
   blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
 
+  /* Set up CAN details for FreeRTOS in the application layer */
+  CAN2_Register();
+
   vTaskStartScheduler();
 }
 
 /* USER CODE END 0 */
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
 
 /**
   * @brief System Clock Configuration

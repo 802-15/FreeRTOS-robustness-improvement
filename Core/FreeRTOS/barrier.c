@@ -71,7 +71,7 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFu
     if ( !pxBarrierHandle->xBarrierSemaphore )
         goto error_out;
 
-    /* Create the one-shot timer and start it */
+    /* Create the one-shot timer */
     if ( xTimeoutTicks )
     {
         pxBarrierHandle->xBarrierTimer = xTimerCreate( "Barrier timer", xTimeoutTicks, pdFALSE, ( void * ) &pxBarrierHandle->pxCallbackStruct, vBarrierTimerCallback );
@@ -80,6 +80,15 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFu
             goto error_out;
         }
     }
+
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        pxBarrierHandle->uxRemoteCounter = 0;
+
+        pxBarrierHandle->xRemoteCounterMutex = xSemaphoreCreateMutex();
+        if ( !pxBarrierHandle->xRemoteCounterMutex )
+            goto error_out;
+
+    #endif
 
     *pxTaskBarrierHandle = pxBarrierHandle;
     return pdPASS;
@@ -91,6 +100,9 @@ error_out:
     xTimerDelete( pxBarrierHandle->xBarrierTimer, 0 );
     vPortFree( pxBarrierHandle );
     pxBarrierHandle = NULL;
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        vSemaphoreDelete( pxBarrierHandle->xRemoteCounterMutex );
+    #endif
     return pdFREERTOS_ERRNO_ENOMEM;
 }
 
@@ -167,6 +179,10 @@ void vBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 
     vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        vSemaphoreDelete( pxBarrierHandle->xRemoteCounterMutex );
+    #endif
+
     vPortFree( pxBarrierHandle );
 
     taskEXIT_CRITICAL();
@@ -198,3 +214,64 @@ void vBarrierTimerCallback( TimerHandle_t xTimer )
     ( void ) errorCode;
     taskEXIT_CRITICAL();
 }
+
+/* Spatial redundancy barrier addon: receive from can continuously and synchronize local barrier */
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+void vBarrierCANReceive( barrierHandle_t * pxBarrierHandle, BaseType_t xTaskState, UBaseType_t uxExecCount, uint32_t uxTaskID )
+{
+    CANSyncMessage_t xMessage = {0};
+    BaseType_t message_sent = pdFAIL;
+    BaseType_t messages_received = pdFAIL;
+
+    /* Send out the sync message to the other nodes */
+    xMessage.uxMessageType = CAN_MESSAGE_SYNC;
+    xMessage.uxTaskState = xTaskState;
+    xMessage.uxExecCount = uxExecCount;
+    xMessage.uxID = uxTaskID;
+
+    message_sent = xCANSendSyncMessage( &xMessage );
+
+    /* Set up remote counter to current value of nodes */
+    pxBarrierHandle->uxRemoteCounter = uxDetectedNodes;
+
+    for( ; ; )
+    {
+        /* Receive messages continously */
+        messages_received = xCANReceiveSyncMessages();
+        if ( messages_received == pdFAIL )
+        {
+            /* Failed while receiving message - resume local execution */
+            break;
+        }
+
+        /* Break from the loop if the barrier is released */
+        #if 0
+        if ( !pxBarrierHandle->uxRemoteCounter )
+        {
+            /* Return back to 'instance done' function */
+            break;
+        }
+        #endif
+
+        /* Re-send local status */
+        if( message_sent == pdFAIL )
+        {
+            message_sent = xCANSendSyncMessage( &xMessage );
+        }
+
+        /* Yield this task */
+        taskYIELD();
+    }
+}
+
+void vBarrierCANSynchronize( barrierHandle_t * pxBarrierHandle )
+{
+    if( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
+    {
+        pxBarrierHandle->uxRemoteCounter--;
+        xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
+    }
+}
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */

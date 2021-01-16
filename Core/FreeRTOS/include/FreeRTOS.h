@@ -291,6 +291,18 @@
 
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
+#ifndef configUSE_SPATIAL_REDUNDANCY
+    #define configUSE_SPATIAL_REDUNDANCY 0
+#endif
+
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+    #if configUSE_TEMPORAL_REDUNDANCY == 0
+        #error If configUSE_SPATIAL_REDUNDANCY is set, then configUSE_TEMPORAL_REDUNDANCY also needs to be set.
+    #endif
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */
+
 #if configMAX_TASK_NAME_LEN < 1
     #error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
 #endif

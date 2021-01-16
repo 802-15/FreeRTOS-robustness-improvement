@@ -130,7 +130,7 @@ void * _sbrk(int incr)
     return (void *) prev_heap_end;
 }
 
-/* These memory pool locks are provided as in structed in the newlib manual.
+/* These memory pool locks are provided as described in the newlib manual.
  * sbrk already contains the appropriate modifications, these locks
  * are kept just in case since other standard library functions must also
  * provide memory pool protection and they get may get called if the standard

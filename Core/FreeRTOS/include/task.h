@@ -518,6 +518,27 @@ typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
 
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+/**
+* task.h
+* <pre>
+* void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxID );
+* </pre>
+*
+* This function will modify the local task based on messages received from CAN.
+* Currently this function can modify the local barrier remote counter and
+* restart the task. Local TCB and the task ID are connected via global arrays.
+*
+* @param uxTaskState Remote task state
+*
+* @param uxID Local task ID
+*
+*/
+    void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxID );
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */
+
 /**
  * task. h
  * <pre>

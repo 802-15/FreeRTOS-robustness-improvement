@@ -35,6 +35,9 @@
 
 #include "semphr.h"
 #include "timers.h"
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+#include "can_messenger.h"
+#endif
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus
@@ -61,6 +64,11 @@ typedef struct barrierHandle
     TimerHandle_t xBarrierTimer;            /*< Barrier can time out if the instances take too long to complete */
 
     callbackContainer_t pxCallbackStruct;   /*< Stores pointer to callback function */
+
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        SemaphoreHandle_t xRemoteCounterMutex;  /*< Protect the remote counter */
+        UBaseType_t uxRemoteCounter;            /*< Store the pointer to the remote counter */
+    #endif
 } barrierHandle_t;
 
 /**
@@ -175,5 +183,48 @@ void vBarrierDestroy( barrierHandle_t * pxBarrierHandle );
  *
  */
 void vBarrierTimerCallback( TimerHandle_t xTimer );
+
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+/**
+ * barrier.h
+ * <pre>
+ * void vBarrierCANReceive( barrierHandle_t * pxBarrierHandle, BaseType_t xTaskState, UBaseType_t uxExecCount, uint32_t uxTaskID );
+ * </pre>
+ *
+ * This function should be called by a single thread of a redundant task,
+ * after making sure all the local threads have reached the barrier.
+ * This function will then send a message to the remote nodes running the
+ * same tasks to synchronize with them and periodically receive messages
+ * from the remote nodes to change the state of local tasks.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ * @param xTaskState Local task state, defined in projdefs.h
+ *
+ * @param uxExecCount Local task instances execution count
+ *
+ * @param uxTaskID Local task ID, comprised of first 4 characters in the task name
+ */
+void vBarrierCANReceive( barrierHandle_t * pxBarrierHandle, BaseType_t xTaskState, UBaseType_t uxExecCount, uint32_t uxTaskID );
+
+/**
+ * barrier.h
+ * <pre>
+ * void vBarrierCANSynchronize( barrierHandle_t * pxBarrierHandle );
+ * </pre>
+ *
+ * This function is called from task.c to increment the remote
+ * barrier counter. Remote counter serves as a way of syncronizing
+ * the barriers across CPUs interconnected by CAN bus.
+ *
+ * @param pxBarrierHandle Barrier handle is used to access the information
+ * related to the barrier.
+ *
+ */
+void vBarrierCANSynchronize( barrierHandle_t * pxBarrierHandle );
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */
 
 #endif /* INC_BARRIER_H */

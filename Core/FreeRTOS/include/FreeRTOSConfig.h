@@ -93,7 +93,12 @@ to exclude the API function. */
 /* Enable time redundancy: set up multiple task instances with xTaskCreate */
 #define configUSE_TEMPORAL_REDUNDANCY		1
 /* Number of task instances to be created */
-#define configTIME_REDUNDANT_INSTANCES		3
+#define configTIME_REDUNDANT_INSTANCES		1
+
+/* Enable spatial redundancy: tasks are synchronized across multiple CPUs */
+#define configUSE_SPATIAL_REDUNDANCY		1
+/* Tune the CAN queue length to application needs: must scale with the number of tasks */
+#define configCAN_QUEUE_LENGTH				10
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS

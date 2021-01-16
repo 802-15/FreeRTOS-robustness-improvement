@@ -29,6 +29,9 @@ extern "C" {
 
 /* USER CODE BEGIN Includes */
 
+#include <string.h>
+#include <can_messenger.h>
+
 /* USER CODE END Includes */
 
 extern CAN_HandleTypeDef hcan2;
@@ -40,6 +43,8 @@ extern CAN_HandleTypeDef hcan2;
 void MX_CAN2_Init(void);
 
 /* USER CODE BEGIN Prototypes */
+
+void CAN2_Register(void);
 
 /* USER CODE END Prototypes */
 
