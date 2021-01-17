@@ -28,7 +28,7 @@ QueueHandle_t receive_queue;
 QueueHandle_t send_queue;
 
 /* Assign an ID to the node */
-const uint32_t can_node_id = 100;
+uint32_t can_node_id;
 
 /* USER CODE END 0 */
 
@@ -42,12 +42,12 @@ void MX_CAN2_Init(void)
   hcan2.Init.Prescaler = 16;
   hcan2.Init.Mode = CAN_MODE_NORMAL;
   hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan2.Init.TimeSeg1 = CAN_BS1_1TQ;
-  hcan2.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_10TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_5TQ;
   hcan2.Init.TimeTriggeredMode = DISABLE;
   hcan2.Init.AutoBusOff = DISABLE;
   hcan2.Init.AutoWakeUp = DISABLE;
-  hcan2.Init.AutoRetransmission = DISABLE;
+  hcan2.Init.AutoRetransmission = ENABLE;
   hcan2.Init.ReceiveFifoLocked = DISABLE;
   hcan2.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan2) != HAL_OK)
@@ -125,6 +125,11 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 
 /* USER CODE BEGIN 1 */
 
+/**
+  * @brief Performs all the steps required to start CAN2 peripheral.
+  * The priority of receive interrupt must be logically lowered, so it
+  * can use "FromISR" routines of FreeRTOS.
+  */
 void CAN2_Init(void)
 {
   CAN_FilterTypeDef can_filter;
@@ -132,8 +137,7 @@ void CAN2_Init(void)
   /* Set up CAN2 transciever and interrupts */
   MX_CAN2_Init();
 
-  /* Set up filters */
-  #if 0
+  /* Set up filters for fif0 */
   can_filter.FilterActivation = ENABLE;
   can_filter.FilterMode = CAN_FILTERMODE_IDMASK;
   can_filter.FilterScale = CAN_FILTERSCALE_32BIT;
@@ -144,22 +148,25 @@ void CAN2_Init(void)
   can_filter.FilterBank = 0;
   can_filter.FilterFIFOAssignment = CAN_RX_FIFO0;
   HAL_CAN_ConfigFilter(&hcan2, &can_filter);
-  #endif
 
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
   HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 6);
   HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
-  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 6);
-  HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
   HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
-  HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO1_MSG_PENDING);
 
   /* Activate node on the bus */
   HAL_CAN_Start(&hcan2);
 }
 
+/**
+  * @brief Send a message using CAN2 peripheral.
+  * This function must map the CAN message structure
+  * defined in FreeRTOS to the HAL compatible data structure,
+  * in this case an array of bytes. After that the blocking
+  * HAL TX function is called.
+  */
 long CAN2_Send(CANSyncMessage_t * message)
 {
   long error_code = 0;
@@ -167,11 +174,6 @@ long CAN2_Send(CANSyncMessage_t * message)
   uint8_t send_buffer[8];
   uint32_t tx_mailbox_number;
   CAN_TxHeaderTypeDef header;
-
-  #if 1 /* this is a test! */
-  volatile uint32_t test = HAL_CAN_GetRxFifoFillLevel(&hcan2, 0);
-  test = HAL_CAN_GetRxFifoFillLevel(&hcan2, 1);
-  #endif
 
   /* Convert CAN message structure to uint8_t array */
   can_message = ( CANSyncMessage_t * ) message;
@@ -198,6 +200,12 @@ long CAN2_Send(CANSyncMessage_t * message)
   }
 }
 
+/**
+  * @brief This function gets called when CAN2 interrupt
+  * occurs. It should copy the received data to the receive
+  * queue available in FreeRTOS, after first copying the message
+  * to the FreeRTOS message structure.
+  */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   int error_code = 0;
@@ -233,37 +241,15 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
 void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-  int error_code = 0;
-  CANSyncMessage_t can_message = {0};
-  uint8_t receive_buffer[8];
-  CAN_RxHeaderTypeDef receive_header;
-
-  /* New message has arrived to FIF0_0, move it to the FreeRTOS queue */
-  error_code = HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO1, &receive_header, receive_buffer);
-  if (error_code != HAL_OK) {
-    xCANReceiveErrno = CAN_STATUS_FAILED;
-    return;
-  }
-
-  /* Check if queue is full */
-  error_code = xQueueIsQueueFullFromISR(receive_queue);
-  if (error_code == pdTRUE) {
-    xCANReceiveErrno = CAN_STATUS_FAILED;
-    return;
-  }
-
-  /* Convert uint8_t array to CAN message struct */
-  can_message.uxMessageType = receive_buffer[0];
-  can_message.uxExecCount = receive_buffer[1];
-  can_message.uxTaskState = receive_buffer[2];
-
-  /* Use memcpy to extract id (uint32_t) from the buffer */
-  memcpy(&can_message.uxID, &receive_buffer[0], 4);
-
-  /* Send to the back of the receive queue */
-  xQueueSendToBackFromISR(receive_queue, &can_message, NULL);
+  /* Use only Fifo0, so this callback should not be executed */
+  (void) hcan;
+  while(1);
 }
 
+/**
+  * @brief Stop the CAN2 peripheral, disable the receive
+  * interrupt callback and disable the peripheral.
+  */
 void CAN2_DeInit(void)
 {
   /* Stop sending and receiving messages */
@@ -271,15 +257,23 @@ void CAN2_DeInit(void)
 
   /* Deactivate notification */
   HAL_CAN_DeactivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
-  HAL_CAN_DeactivateNotification(&hcan2, CAN_IT_RX_FIFO1_MSG_PENDING);
 
   /* Wrap around CubeMX generated function */
   HAL_CAN_MspDeInit(&hcan2);
 }
 
+/**
+  * @brief Create message queues and pass their pointers to FreeRTOS, along
+  * with pointers to CAN related functions. The ID parameter is used to
+  * signify priority in each message, and it should be different between
+  * boards
+  */
 void CAN2_Register(void)
 {
   CANHandlers_t canHandlers;
+
+  /* This might not be ideal if you have boards of the same revision */
+  can_node_id = HAL_GetREVID();
 
   /* Create send and receive queues; no checks */
   receive_queue = xQueueCreate(CAN_QUEUE_LENGTH, sizeof(CANSyncMessage_t));
