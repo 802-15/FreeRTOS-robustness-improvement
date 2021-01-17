@@ -51,6 +51,7 @@ void MX_GPIO_Init(void);
 /* USER CODE BEGIN Prototypes */
 
 void gpio_led_state (uint8_t LED_ID, uint8_t state);
+void gpio_led_toggle(uint8_t LED_ID);
 
 /* USER CODE END Prototypes */
 

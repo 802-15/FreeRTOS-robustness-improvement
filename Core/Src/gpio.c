@@ -40,6 +40,24 @@ void gpio_led_state(uint8_t LED_ID, uint8_t state)
         break;
   }
 }
+
+void gpio_led_toggle(uint8_t LED_ID)
+{
+  switch(LED_ID) {
+      case LED3_ORANGE_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED3_ORANGE_PinNumber);
+        break;
+      case LED4_GREEN_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED4_GREEN_PinNumber);
+        break;
+      case LED5_RED_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED5_RED_PinNumber);
+        break;
+      case LED6_BLUE_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED6_BLUE_PinNumber);
+        break;
+  }
+}
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/

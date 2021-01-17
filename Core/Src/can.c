@@ -192,6 +192,9 @@ long CAN2_Send(CANSyncMessage_t * message)
   /* Add message to the queue */
   error_code = HAL_CAN_AddTxMessage(&hcan2, &header, send_buffer, &tx_mailbox_number);
 
+  /* Flip the GPIO state */
+  gpio_led_toggle(LED6_BLUE_ID);
+
   /* Return code must be correctly mapped to FreeRTOS pdPASS/pdFAIL defines */
   if (error_code == HAL_OK) {
     return 1;
@@ -235,6 +238,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   /* Use memcpy to extract id (uint32_t) from the buffer */
   memcpy(&can_message.uxID, &receive_buffer[0], 4);
 
+  /* Flip the GPIO state */
+  gpio_led_toggle(LED4_GREEN_ID);
+
   /* Send to the back of the receive queue */
   xQueueSendToBackFromISR(receive_queue, &can_message, NULL);
 }
@@ -270,14 +276,16 @@ void CAN2_DeInit(void)
   */
 void CAN2_Register(void)
 {
+  size_t element_size;
   CANHandlers_t canHandlers;
 
   /* This might not be ideal if you have boards of the same revision */
   can_node_id = HAL_GetREVID();
 
   /* Create send and receive queues; no checks */
-  receive_queue = xQueueCreate(CAN_QUEUE_LENGTH, sizeof(CANSyncMessage_t));
-  send_queue = xQueueCreate(CAN_QUEUE_LENGTH, sizeof(CANSyncMessage_t));
+  element_size = xCANElementSize();
+  receive_queue = xQueueCreate(CAN_QUEUE_LENGTH, element_size);
+  send_queue = xQueueCreate(CAN_QUEUE_LENGTH, element_size);
 
   /* Register CAN handlers for FreeRTOS */
   canHandlers.pvCANInitFunc = CAN2_Init;

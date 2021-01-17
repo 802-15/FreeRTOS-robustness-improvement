@@ -30,7 +30,9 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 
 #include <string.h>
+
 #include <can_messenger.h>
+#include "gpio.h"
 
 /* USER CODE END Includes */
 
