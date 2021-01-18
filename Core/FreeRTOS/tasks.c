@@ -269,9 +269,13 @@
         TaskFunction_t pxTaskCode;                                  /*< Pointer to the task code function */
         void * pvTaskParams;                                        /*< Pointer to parameters that can be passed between execution instances */
         uint32_t usStackDepth;                                      /*< Store stack depth information for task restoration */
+
         #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+            UBaseType_t uxTaskCANSync;                              /*< This task will be synced over CAN */
             UBaseType_t uxRemoteState;                              /*< Store remote state in a single variable */
+            uint32_t uxTaskResult;                                  /*< Store task result */
         #endif
+
     } redundantTCB_t;
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
@@ -367,9 +371,6 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         redundantTCB_t * pxRedundantTask;   /*< Pointer to redundant task structure with global task information */
     #endif
 
-    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-        uint32_t uxTaskID;                  /*< Task ID for CAN messenger compatibility */
-    #endif
 } tskTCB;
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
@@ -392,12 +393,10 @@ PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /*< Poi
 PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
 #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-
-/* Store task ID's and pointers to TCBs using two global arrays */
-static uint32_t prvTaskIDs[CAN_MAXIMUM_NUMBER_OF_TASKS] = {0};
-static TCB_t * prvTaskTCBs[CAN_MAXIMUM_NUMBER_OF_TASKS] = {0};
-static BaseType_t xCANTasks = 0;
-
+static TCB_t * pxCANTask = NULL;                                            /* Pointer to a single CAN task */
+static BaseType_t xReceivedResults = 0;                                     /* Number of received task results */
+static uint32_t uxTaskResults[CAN_MAXIMUM_NUMBER_OF_NODES] = {0};           /* Store remote CAN task results here */
+static uint32_t uxLocalTaskResults[configTIME_REDUNDANT_INSTANCES] = {0};   /* Store local instance task results here*/
 #endif
 
 #if ( INCLUDE_vTaskDelete == 1 )
@@ -606,6 +605,14 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
  * under the control of the scheduler.
  */
 static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
+
+/*
+ * Called after a redundant task has all the remote results, this function must
+ * calculate the most frequent element to evaluate the correct result.
+ */
+#if ( configUSE_SPATIAL_REDUNDANCY == 1)
+    static UBaseType_t prvValidateExecutionStatus(void);
+#endif
 
 /*
  * freertos_tasks_c_additions_init() should only be called if the user definable
@@ -978,7 +985,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         redundantTCB_t * pxRedundantTask = NULL;
         barrierHandle_t * pxBarrierHandle = NULL;
         barrierHandle_t * pxSuspendBarrierHandle = NULL;
-        uint32_t xTaskID = 0;
 
         if ( xTaskGetInstanceNumber() > 0 )
         {
@@ -1009,6 +1015,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
         pxRedundantTask->pxSuspendBarrierHandle = NULL;
         pxRedundantTask->pxTaskCode = pxTaskCode;
 
+        #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+            pxRedundantTask->uxTaskCANSync = 0;
+            pxRedundantTask->uxTaskResult = 0;
+        #endif
+
         /* Initialize the barrier for task instance synchronization */
         if ( xBarrierCreate( &pxBarrierHandle, pxRedundantTask->pvFailureFunc, xTimeoutTicks, pxCreatedTask ) != pdPASS || !pxBarrierHandle )
             goto error_out;
@@ -1018,25 +1029,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
         pxRedundantTask->pxBarrierHandle = pxBarrierHandle;
         pxRedundantTask->pxSuspendBarrierHandle = pxSuspendBarrierHandle;
-
-        /* Get task ID */
-        #if ( configUSE_SPATIAL_REDUNDANCY )
-
-            pxRedundantTask->uxTaskState = pdFREERTOS_INSTANCE_RUNNING;
-
-            if ( xCANTasks < CAN_MAXIMUM_NUMBER_OF_TASKS )
-            {
-                /* Calculate task ID by taking the value of first 4 bytes */
-                xTaskID = ( uint32_t ) pcName[0] \
-                    + (pcName[1] << 8) \
-                    + (pcName[2] << 16) \
-                    + (pcName[3] << 24);
-
-                prvTaskIDs[xCANTasks] = xTaskID;
-                prvTaskTCBs[xCANTasks] = prvGetTCBFromHandle( * pxCreatedTask );
-                xCANTasks++;
-            }
-        #endif
 
         for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
         {
@@ -1071,9 +1063,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
             /* All instances can point to the redundant task structure */
             pxTCB->pxRedundantTask = pxRedundantTask;
             pxTCB->uxInstanceNum = i;
-            #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-                pxTCB->uxTaskID = xTaskID;
-            #endif
+
         }
 
         xReturn = pdTRUE;
@@ -1292,12 +1282,6 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
             pxNewTCB->uxExecCount = 0;
             pxNewTCB->uxExecResult = 0;
             pxNewTCB->pxRedundantTask = NULL;
-        }
-    #endif
-
-    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-        {
-            pxNewTCB->uxTaskID = 0;
         }
     #endif
 
@@ -1579,12 +1563,15 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
          * finished or has failed executing. It will block the running instance
          * until others have finished execution.
          */
-        BaseType_t xReturn = pdPASS;
+        BaseType_t xReturn = pdFAIL;
         BaseType_t i = 0;
         TaskHandle_t currentTaskInstance = NULL;
         TCB_t * currentTCB = NULL;
         TCB_t * iterTCB = NULL;
-        BaseType_t xLocalTaskState = pdFREERTOS_INSTANCE_FAILED;
+        BaseType_t xLocalTaskState = pdFREERTOS_INSTANCE_DONE;
+        BaseType_t xRemoteTaskState = pdFREERTOS_INSTANCE_DONE;
+        UBaseType_t uxMajorityResult = 0;
+        CANSyncMessage_t xMessage = {0};
 
         taskENTER_CRITICAL();
 
@@ -1601,6 +1588,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         currentTCB->uxExecResult = uxExecResult;
         currentTCB->uxExecCount++;
 
+        /* Store local execution result */
+        #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+            uxLocalTaskResults[currentTCB->uxInstanceNum] = uxExecResult;
+
+        #else
+
         /* Instances returning pdPASS will be marked by 'done', otherwise they are treated as failed */
         if ( currentTCB->uxExecResult == pdPASS )
         {
@@ -1610,6 +1604,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         {
             currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
         }
+
+        #endif /* configUSE_SPATIAL_REDUNDANCY */
 
         taskEXIT_CRITICAL();
 
@@ -1623,7 +1619,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         /* This segment is executed once the barrier has been opened */
         taskENTER_CRITICAL();
 
-        /* Evaluate the overall execution state of the task by checking if instance is in the 'DONE' state */
+        /* Evaluate the overall LOCAL execution state of the task by checking if instance is in the 'DONE' state */
         for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
         {
             if ( i == 0 )
@@ -1634,26 +1630,65 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             {
                 iterTCB = *pxCurrentTCB->pxRedundantTask->pxInstances[i];
             }
-            if ( iterTCB->uxInstanceState != pdFREERTOS_INSTANCE_DONE )
-            {
-                xReturn = pdFAIL;
-            }
+
+            #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+                if ( i == configTIME_REDUNDANT_INSTANCES )
+                {
+                    iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
+                    break;
+                }
+
+                /* All local instances must have the same result, otherwise they failed */
+                if ( uxLocalTaskResults[i] != uxLocalTaskResults[i+1] )
+                {
+                    xLocalTaskState = pdFREERTOS_INSTANCE_FAILED;
+                }
+            #else
+                if ( iterTCB->uxInstanceState != pdFREERTOS_INSTANCE_DONE )
+                {
+                    xLocalTaskState = pdFREERTOS_INSTANCE_FAILED;
+                }
+            #endif /* configUSE_SPATIAL_REDUNDANCY */
 
             /* Reset the instance states */
             iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
         }
 
         #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+            if ( currentTCB->pxRedundantTask->uxTaskCANSync )
+            {
+                if ( xCANPrimaryNode() == pdTRUE )
+                {
+                    taskEXIT_CRITICAL();
+                    vCANSendReceive( currentTCB->pxRedundantTask->pxBarrierHandle, NULL );
+                    taskENTER_CRITICAL();
 
-            /* Send a sync message and wait for the remote threads */
-            taskEXIT_CRITICAL();
-            vBarrierCANReceive( currentTCB->pxRedundantTask->pxBarrierHandle, xLocalTaskState, currentTCB->uxExecCount, currentTCB->uxTaskID );
-            taskENTER_CRITICAL();
+                    /* Get the most frequent execution result */
+                    uxMajorityResult = prvValidateExecutionStatus();
+                    if ( uxExecResult != uxMajorityResult )
+                    {
+                        xRemoteTaskState = pdFREERTOS_INSTANCE_FAILED;
+                    }
 
+                    /* Send an arbitration message to the other instances/or wait for it */
+                    xMessage.uxMessageType = CAN_MESSAGE_ARBITRATION;
+                    xMessage.uxTaskState = xRemoteTaskState;
+                    xMessage.uxID = uxExecResult;
+                    xCANSendSyncMessage( &xMessage );
+                }
+                else
+                {
+                    taskEXIT_CRITICAL();
+                    vCANSendReceive( currentTCB->pxRedundantTask->pxBarrierHandle, &xMessage );
+                    taskENTER_CRITICAL();
+                }
+            }
         #endif /* configUSE_SPATIAL_REDUNDANCY */
 
-        if ( xReturn == pdFAIL || currentTCB->pxRedundantTask->uxTaskState == pdFREERTOS_INSTANCE_FAILED )
+        if ( xLocalTaskState == pdFREERTOS_INSTANCE_FAILED || xRemoteTaskState == pdFREERTOS_INSTANCE_FAILED )
         {
+            xReturn = pdFAIL;
             /* At least one of the instances has failed, run failure handle if registered */
             if ( currentTCB->pxRedundantTask->pvFailureFunc )
             {
@@ -1665,9 +1700,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 taskENTER_CRITICAL();
             }
         }
+        else
+        {
+            xReturn = pdPASS;
+        }
 
-        /* Release the remaning threads from the barrier */
+        /* Release the remaning local threads from the barrier */
         vBarrierSignal( currentTCB->pxRedundantTask->pxBarrierHandle );
+
+        /* Reset the result counter */
+        xReceivedResults = 0;
 
         taskEXIT_CRITICAL();
 
@@ -1747,54 +1789,69 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
 #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
 
-    void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxID )
+    void vTaskCANRegister( TaskHandle_t xCANTask )
     {
-        BaseType_t i = 0;
-        TCB_t * pxTaskTCB = NULL;
+        TCB_t * currentTCB = NULL;
+
+        /* Return if the calling thread is not the first task instance thread */
+        if ( xTaskGetInstanceNumber() > 0 )
+        {
+            return;
+        }
+
+        /* Task CAN state is modifiable only at startup */
+        if ( xTaskGetSchedulerState() )
+        {
+            return;
+        }
 
         taskENTER_CRITICAL();
 
-        /* Search global array for ID */
-        for( i = 0; i < CAN_MAXIMUM_NUMBER_OF_TASKS; i++ )
+        currentTCB = prvGetTCBFromHandle( xCANTask );
+
+        pxCANTask = currentTCB;
+
+        /* Toggle the task CAN sync */
+        if ( currentTCB->pxRedundantTask->uxTaskCANSync )
         {
-            if( prvTaskIDs[i] == uxID && prvTaskTCBs[i] )
-            {
-                pxTaskTCB = prvTaskTCBs[i];
-            }
+            currentTCB->pxRedundantTask->uxTaskCANSync = 1;
         }
-
-        /* Local copy was not found, return early */
-        if ( !pxTaskTCB )
-            return;
-
-        /* Store remote state */
-        //if ( pxTaskTCB->pxRedundantTask->uxTaskState == px )
-       // {
-       //     pxTaskTCB->pxRedundantTask->px
-       // }
-
-        switch( uxTaskState )
-        {
-            case pdFREERTOS_INSTANCE_DONE:
-                /* Change the barrier remote counter - success state */
-                vBarrierCANSynchronize( pxTaskTCB->pxRedundantTask->pxBarrierHandle );
-                break;
-
-            case pdFREERTOS_INSTANCE_FAILED:
-                /* Change the barrier remote counter - failed state */
-                vBarrierCANSynchronize( pxTaskTCB->pxRedundantTask->pxBarrierHandle );
-                break;
-
-            case pdFREERTOS_INSTANCE_TIMEOUT:
-                /* Reset the local task on timeout */
-                xTaskReset( ( TaskHandle_t * ) pxTaskTCB );
-                break;
-
-            default:
-                break;
+        else{
+            currentTCB->pxRedundantTask->uxTaskCANSync = 0;
         }
 
         taskEXIT_CRITICAL();
+    }
+
+    void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxTaskResult )
+    {
+        /* Local CAN task was not found, return early */
+        if ( !pxCANTask)
+            return;
+
+        taskENTER_CRITICAL();
+
+        /* Store remote state */
+        uxTaskResults[xReceivedResults] = uxTaskResult;
+        xReceivedResults++;
+
+        /* Decrement the remote barrier counter */
+        vCANRemoteSignal( pxCANTask->pxRedundantTask->pxBarrierHandle );
+
+        taskEXIT_CRITICAL();
+    }
+
+    static UBaseType_t prvValidateExecutionStatus( void )
+    {
+        BaseType_t i;
+
+            /* Dummy routine for finding the correct result */
+           for( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
+            {
+                if( uxTaskResults[i] != uxTaskResults[i+1] )
+                    return 0;
+            }
+            return uxTaskResults[i];
     }
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */
@@ -1847,16 +1904,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     vBarrierDestroy( pxTCB->pxRedundantTask->pxBarrierHandle );
                     vBarrierDestroy( pxTCB->pxRedundantTask->pxSuspendBarrierHandle );
                     vPortFree( pxTCB->pxRedundantTask );
-
-                    /* Remove entry from CAN lists */
-                    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-                        if ( xCANTasks > 0 )
-                        {
-                            prvTaskIDs[xCANTasks] = 0;
-                            prvTaskTCBs[xCANTasks] = NULL;
-                            xCANTasks--;
-                        }
-                    #endif
 
                     /* Delete the original task instance pxTCB */
                 }

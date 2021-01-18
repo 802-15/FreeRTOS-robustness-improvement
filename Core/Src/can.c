@@ -30,6 +30,12 @@ QueueHandle_t send_queue;
 /* Assign an ID to the node */
 uint32_t can_node_id;
 
+/* CAN frame ID is 11 bit, so the 32 bit ID gets shifted */
+uint32_t can_node_id_frame;
+
+/* Node role selection */
+uint32_t can_node_role = CAN_NODE_PRIMARY;
+
 /* USER CODE END 0 */
 
 CAN_HandleTypeDef hcan2;
@@ -181,7 +187,8 @@ long CAN2_Send(CANSyncMessage_t * message)
   send_buffer[0] = can_message->uxMessageType;
   send_buffer[1] = can_message->uxExecCount;
   send_buffer[2] = can_message->uxTaskState;
-  memcpy(&send_buffer[3], & ( can_message->uxID ), 4);
+  send_buffer[3] = can_message->uxCANNodeRole;
+  memcpy(&send_buffer[4], & ( can_message->uxID ), 4);
 
   /* Set up the HAL TX handle */
   header.StdId = can_node_id;       /* Set up unique ID for each node */
@@ -234,9 +241,10 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   can_message.uxMessageType = receive_buffer[0];
   can_message.uxExecCount = receive_buffer[1];
   can_message.uxTaskState = receive_buffer[2];
+  can_message.uxCANNodeRole = receive_buffer[3];
 
   /* Use memcpy to extract id (uint32_t) from the buffer */
-  memcpy(&can_message.uxID, &receive_buffer[0], 4);
+  memcpy(&can_message.uxID, &receive_buffer[4], 4);
 
   /* Flip the GPIO state */
   gpio_led_toggle(LED4_GREEN_ID);
@@ -272,7 +280,7 @@ void CAN2_DeInit(void)
   * @brief Create message queues and pass their pointers to FreeRTOS, along
   * with pointers to CAN related functions. The ID parameter is used to
   * signify priority in each message, and it should be different between
-  * boards
+  * boards.
   */
 void CAN2_Register(void)
 {
@@ -281,6 +289,13 @@ void CAN2_Register(void)
 
   /* This might not be ideal if you have boards of the same revision */
   can_node_id = HAL_GetREVID();
+  canHandlers.uxNodeID = can_node_id;
+
+  /* 32 bit to 11 bit identifier for the actual CAN frame */
+  can_node_id_frame = can_node_id >> 21;
+
+  /* Primary/secondary node selection (only one node can be primary) */
+  canHandlers.uxCANNodeRole = can_node_role;
 
   /* Create send and receive queues; no checks */
   element_size = xCANElementSize();
@@ -292,7 +307,7 @@ void CAN2_Register(void)
   canHandlers.pvCANDeInitFunc = CAN2_DeInit;
   canHandlers.pvCANSendFunc = CAN2_Send;
 
-  vCANRegister(&canHandlers, send_queue, receive_queue, can_node_id);
+  vCANRegister(&canHandlers, send_queue, receive_queue);
 }
 
 /* USER CODE END 1 */

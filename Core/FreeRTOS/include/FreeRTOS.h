@@ -301,6 +301,17 @@
         #error If configUSE_SPATIAL_REDUNDANCY is set, then configUSE_TEMPORAL_REDUNDANCY also needs to be set.
     #endif
 
+    /* Default option for the CAN queue length: if it is too small,
+     * messages might be missed */
+    #ifndef configCAN_QUEUE_LENGTH
+        #define configCAN_QUEUE_LENGTH 20
+    #endif
+
+    /* This must match the number of nodes on the network */
+    #ifndef configCAN_NODES
+        #define configCAN_NODES 2
+    #endif
+
 #endif /* configUSE_SPATIAL_REDUNDANCY */
 
 #if configMAX_TASK_NAME_LEN < 1

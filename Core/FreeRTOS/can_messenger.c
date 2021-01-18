@@ -32,8 +32,9 @@
 #include "can_messenger.h"
 
 
-/* Receive errno is set up inside ISR to notify FreeRTOS if we failed to receive the message */
+/* Errno variables are set in the HAL functions (application layer) */
 volatile BaseType_t xCANReceiveErrno;
+volatile BaseType_t xCANSendErrno;
 
 /* Global CAN send and receive queue pointers, must be prepared in the application layer */
 static QueueHandle_t xCANReceiveQueue;
@@ -43,9 +44,8 @@ static QueueHandle_t xCANSendQueue;
 static CANHandlers_t xCANHandlers;
 
 /* Keep track of the nodes detected on the CAN bus */
-static uint32_t uxNodeID = 0;
 static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES] = {0};
-UBaseType_t uxDetectedNodes = 0;
+UBaseType_t uxCANDetectedNodes = 0;
 
 
 BaseType_t xCANMessengerInit( void )
@@ -69,13 +69,13 @@ BaseType_t xCANMessengerInit( void )
         return error_code;
     }
 
-    uxDetectedNodes = 0;
+    uxCANDetectedNodes = 0;
 
     /* Run the CAN init function */
     xCANHandlers.pvCANInitFunc();
     xCANHandlers.uxCANStatus = CAN_STATUS_OK;
 
-    /* Send a CAN init function */
+    /* Send a CAN init message */
     xCANSendStartStopMessage( pdPASS );
 
     error_code = pdPASS;
@@ -97,20 +97,24 @@ void vCANMessengerDeinit( void )
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
 }
 
-void vCANRegister( CANHandlers_t * pxHandlers, QueueHandle_t xSendQueue, QueueHandle_t xReceiveQueue, uint32_t uxID )
+void vCANRegister( CANHandlers_t * pxHandlers, QueueHandle_t xSendQueue, QueueHandle_t xReceiveQueue )
 {
+    taskENTER_CRITICAL();
     /* Store pointers to queues */
     xCANReceiveQueue = xReceiveQueue;
     xCANSendQueue = xSendQueue;
 
     /* Assign handles to the global CAN handles structre */
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
+    xCANHandlers.uxCANNodeRole = pxHandlers->uxCANNodeRole;
+
     xCANHandlers.pvCANInitFunc = pxHandlers->pvCANInitFunc;
     xCANHandlers.pvCANDeInitFunc = pxHandlers->pvCANDeInitFunc;
     xCANHandlers.pvCANSendFunc = pxHandlers->pvCANSendFunc;
 
     /* Store node ID */
-    uxNodeID = uxID;
+    xCANHandlers.uxNodeID = pxHandlers->uxNodeID;
+    taskEXIT_CRITICAL();
 }
 
 UBaseType_t xCANElementSize( void )
@@ -126,7 +130,10 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
     BaseType_t error_code = pdFAIL;
     CANSyncMessage_t xMessage = {0};
 
-    if ( uxMessageIsStartup == pdPASS )
+    if( xCANHandlers.uxCANStatus == CAN_STATUS_FAILED )
+        return error_code;
+
+    if( uxMessageIsStartup == pdPASS )
     {
         xMessage.uxMessageType = CAN_MESSAGE_STARTUP;
     }
@@ -135,15 +142,11 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
         xMessage.uxMessageType = CAN_MESSAGE_STOP;
     }
 
-    if ( !uxNodeID )
-    {
-        return error_code;
-    }
-
-    xMessage.uxID = uxNodeID;
+    xMessage.uxCANNodeRole = xCANHandlers.uxCANNodeRole;
+    xMessage.uxID = xCANHandlers.uxNodeID;
 
     error_code = xQueueSendToBack( xCANSendQueue, &xMessage, 0 );
-    if ( error_code == pdFAIL )
+    if( error_code == pdFAIL )
     {
         return error_code;
     }
@@ -157,6 +160,8 @@ BaseType_t xCANSendSyncMessage( CANSyncMessage_t * pxMessage )
     /* Synchronization message is sent when the task completes.
      */
     BaseType_t error_code = pdFAIL;
+
+    pxMessage->uxCANNodeRole = xCANHandlers.uxCANNodeRole;
 
     error_code = xQueueSendToBack( xCANSendQueue, pxMessage, 0 );
     if ( error_code == pdFAIL )
@@ -177,11 +182,13 @@ BaseType_t xCANReceiveSyncMessages( void )
      * has failed at some point.
      */
     BaseType_t error_code = pdPASS;
-    CANSyncMessage_t xMessage = {0};
-    BaseType_t i = 0;
 
     while( uxQueueMessagesWaiting( xCANReceiveQueue ) )
     {
+
+        CANSyncMessage_t xMessage = {0};
+        BaseType_t i = 0;
+
         error_code = xQueueReceive( xCANReceiveQueue, &xMessage, 0 );
         if ( error_code == pdFAIL )
         {
@@ -201,8 +208,15 @@ BaseType_t xCANReceiveSyncMessages( void )
                     }
                 }
                 /* A new node has appeared, copy the ID */
-                prvNodeIDArray[uxDetectedNodes] = xMessage.uxID;
-                uxDetectedNodes++;
+                for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES; i++ )
+                {
+                    if ( prvNodeIDArray[i] == 0 )
+                    {
+                        prvNodeIDArray[i] = xMessage.uxID;
+                        uxCANDetectedNodes++;
+                        break;
+                    }
+                }
                 break;
 
             case CAN_MESSAGE_STOP:
@@ -211,8 +225,8 @@ BaseType_t xCANReceiveSyncMessages( void )
                     if ( xMessage.uxID == prvNodeIDArray[i] )
                     {
                         /* Remove the node from internal list */
-                        prvNodeIDArray[uxDetectedNodes] = 0;
-                        uxDetectedNodes--;
+                        prvNodeIDArray[i] = 0;
+                        uxCANDetectedNodes--;
                         break;
                     }
                 }
@@ -220,14 +234,22 @@ BaseType_t xCANReceiveSyncMessages( void )
                 break;
 
             case CAN_MESSAGE_SYNC:
-                /* A task finished executing - locate the redundant task by
-                 * searching the ID list */
-                for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_TASKS; i++ )
+                /* A task finished executing - store the result or ignore
+                 * the message if this is  a secondary node.
+                 */
+                if ( xMessage.uxCANNodeRole == CAN_NODE_PRIMARY )
                 {
-                    if ( xMessage.uxID == prvNodeIDArray[i] )
-                    {
-                        vTaskModifyCANState( xMessage.uxTaskState, xMessage.uxID );
-                    }
+                    vTaskModifyCANState( xMessage.uxTaskState, xMessage.uxID );
+                }
+                break;
+
+            case CAN_MESSAGE_ARBITRATION:
+                /* An arbitration message with the correct result was
+                 * received. Task behaviour will be modified in tasks.c
+                 */
+                if ( xMessage.uxCANNodeRole == CAN_NODE_SECONDARY )
+                {
+                    vTaskModifyCANState( xMessage.uxTaskState, xMessage.uxID );
                 }
                 break;
 
@@ -239,4 +261,66 @@ BaseType_t xCANReceiveSyncMessages( void )
     }
 
     return error_code;
+}
+
+void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMessage )
+{
+    BaseType_t message_sent = pdFAIL;
+    BaseType_t messages_received = pdFAIL;
+
+    if ( pxMessage )
+        message_sent = xCANSendSyncMessage( pxMessage );
+
+    /* Set up remote counter to current value of nodes */
+    if ( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
+    {
+        pxBarrierHandle->uxRemoteCounter = uxCANDetectedNodes;
+        xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
+    }
+
+    for( ; ; )
+    {
+        /* Receive messages continously */
+        messages_received = xCANReceiveSyncMessages();
+        if ( messages_received == pdFAIL )
+        {
+            break;
+        }
+
+        /* Break from the loop if the barrier is released */
+        if ( !pxBarrierHandle->uxRemoteCounter )
+        {
+            break;
+        }
+
+        /* Re-send local status */
+        if( message_sent == pdFAIL && pxMessage )
+        {
+            message_sent = xCANSendSyncMessage( pxMessage );
+        }
+
+        /* Yield this task */
+        taskYIELD();
+    }
+}
+
+void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle )
+{
+    if( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
+    {
+        pxBarrierHandle->uxRemoteCounter--;
+        xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
+    }
+}
+
+BaseType_t xCANPrimaryNode( void )
+{
+    if ( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
+    {
+        return pdTRUE;
+    }
+    else
+    {
+        return pdFALSE;
+    }
 }

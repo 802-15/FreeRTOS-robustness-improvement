@@ -99,6 +99,8 @@ to exclude the API function. */
 #define configUSE_SPATIAL_REDUNDANCY		1
 /* Tune the CAN queue length to application needs: must scale with the number of tasks */
 #define configCAN_QUEUE_LENGTH				10
+/* The number of physical nodes must match this configuration option */
+#define configCAN_NODES						2
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
