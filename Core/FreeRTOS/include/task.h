@@ -538,19 +538,23 @@ typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 /**
 * task.h
 * <pre>
-* void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxTaskResult );
+* void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType );
 * </pre>
 *
-* This function will modify the local task based on messages received from CAN.
-* Currently this function can modify the local barrier remote counter and
-* store the task result to a global array.
+* Save the task result to the global array for voting on the
+* correct result later. The task result values get stored
+* if the remote instances have finished succesfully. The barrier
+* is signaled from this function since TCB pointers are available
+* only inside the task module.
 *
-* @param uxTaskState Remote task state
+* @param uxTaskState The remote task state
 *
 * @param uxTaskResult Task result
 *
+* @param xMessageType Syncrhonization or abritration message, will decide on the barrier state
+*
 */
-    void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxTaskResult );
+    void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType );
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */
 

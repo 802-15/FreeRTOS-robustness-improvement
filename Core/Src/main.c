@@ -199,7 +199,7 @@ int main(void)
   /* Set up CAN details for FreeRTOS in the application layer */
   CAN2_Register();
 
-  /* Register the task on the CAN */
+  /* Set up CAN sync on the first task */
   vTaskCANRegister(blinkyHandle);
 
   vTaskStartScheduler();
