@@ -395,7 +395,7 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tas
 #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
 static TCB_t * pxCANTask = NULL;                                            /* Pointer to a single CAN task */
 static BaseType_t xReceivedResults = 0;                                     /* Number of received task results */
-static uint32_t uxTaskResults[CAN_MAXIMUM_NUMBER_OF_NODES] = {0};           /* Store remote CAN task results here */
+static uint32_t uxTaskResults[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};       /* Store remote CAN task results here */
 static uint32_t uxLocalTaskResults[configTIME_REDUNDANT_INSTANCES] = {0};   /* Store local instance task results here*/
 #endif
 
@@ -1660,11 +1660,15 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
         }
 
+        /* Depending on the node role on the small can network different behaviour is required. */
         #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
             if ( currentTCB->pxRedundantTask->uxTaskCANSync )
             {
                 if ( xCANPrimaryNode() == pdTRUE )
                 {
+                    /* Primary node immediately starts processing received messages
+                     * in order to collect all the remote task results.
+                     */
                     taskEXIT_CRITICAL();
                     vCANSendReceive( currentTCB->pxRedundantTask->pxBarrierHandle, NULL );
                     taskENTER_CRITICAL();
@@ -1676,7 +1680,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         xRemoteTaskState = pdFREERTOS_INSTANCE_FAILED;
                     }
 
-                    /* Send an arbitration message to the other instances/or wait for it */
+                    /* Send an arbitration message to the other instances  */
                     xMessage.uxMessageType = CAN_MESSAGE_ARBITRATION;
                     xMessage.uxTaskState = xRemoteTaskState;
                     xMessage.uxID = uxExecResult;
@@ -1684,6 +1688,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 }
                 else
                 {
+                    /* Secondary nodes send out their result and wait for the arbitration message
+                     * sent out by the primary node.
+                     */
+                    xMessage.uxMessageType = CAN_MESSAGE_SYNC;
+                    xMessage.uxTaskState = xLocalTaskState;
+                    xMessage.uxID = uxExecResult;
+
                     taskEXIT_CRITICAL();
                     vCANSendReceive( currentTCB->pxRedundantTask->pxBarrierHandle, &xMessage );
                     taskENTER_CRITICAL();
@@ -1691,6 +1702,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             }
         #endif /* configUSE_SPATIAL_REDUNDANCY */
 
+        /* The following block of code decides on running the failure handle locally, based on the
+         * received remote and local instance states.
+         */
         if ( xLocalTaskState == pdFREERTOS_INSTANCE_FAILED || xRemoteTaskState == pdFREERTOS_INSTANCE_FAILED )
         {
             xReturn = pdFAIL;
@@ -1712,9 +1726,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         /* Release the remaning local threads from the barrier */
         vBarrierSignal( currentTCB->pxRedundantTask->pxBarrierHandle );
-
-        /* Reset the result counter */
-        xReceivedResults = 0;
 
         taskEXIT_CRITICAL();
 
@@ -1828,7 +1839,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         taskEXIT_CRITICAL();
     }
 
-    void vTaskModifyCANState( UBaseType_t uxTaskState, uint32_t uxTaskResult )
+    void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType )
     {
         /* Local CAN task was not found, return early */
         if ( !pxCANTask)
@@ -1836,27 +1847,31 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         taskENTER_CRITICAL();
 
-        /* Store remote state */
-        uxTaskResults[xReceivedResults] = uxTaskResult;
-        xReceivedResults++;
+        /* Store remote state if successful */
+        if ( uxTaskState == pdFREERTOS_INSTANCE_DONE )
+        {
+            uxTaskResults[xReceivedResults] = uxTaskResult;
+            xReceivedResults++;
+        }
 
-        /* Decrement the remote barrier counter */
-        vCANRemoteSignal( pxCANTask->pxRedundantTask->pxBarrierHandle );
+        if ( xMessageType == CAN_MESSAGE_ARBITRATION )
+        {
+            /* Immediately release the barrier */
+            vCANRemoteSignal( pxCANTask->pxRedundantTask->pxBarrierHandle, pdTRUE );
+        }
+        else
+        {
+            /* Sync messages unlock the barrier incrementally */
+            vCANRemoteSignal( pxCANTask->pxRedundantTask->pxBarrierHandle, pdFALSE );
+        }
 
         taskEXIT_CRITICAL();
     }
 
     static UBaseType_t prvValidateExecutionStatus( void )
     {
-        BaseType_t i;
-
-            /* Dummy routine for finding the correct result */
-           for( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
-            {
-                if( uxTaskResults[i] != uxTaskResults[i+1] )
-                    return 0;
-            }
-            return uxTaskResults[i];
+        /* Dummy routine for finding the correct result */
+        return uxTaskResults[0];
     }
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */

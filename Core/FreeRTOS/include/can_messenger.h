@@ -51,7 +51,7 @@
 /* Suggested queue length, it might need to be adjusted to suit the application needs */
 #define CAN_QUEUE_LENGTH configCAN_QUEUE_LENGTH
 
-/* Maximum number of nodes to be expected */
+/* Number of nodes to be expected */
 #define CAN_MAXIMUM_NUMBER_OF_NODES configCAN_NODES
 
 /* These errno variables can be set inside the HAL CAN routines if the
@@ -260,7 +260,7 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
 /**
  * can_messenger.h
  * <pre>
- * void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle );
+ * void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle, BaseType_t xIsArbitrationMessage );
  * </pre>
  *
  * This function is called from task.c to increment the remote
@@ -270,8 +270,11 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
  * @param pxBarrierHandle Barrier handle is used to access the information
  * related to the barrier.
  *
+ * @param xIsArbitrationMessage If the message is arbitration, this should be set to pdTRUE
+ * to release the barrier immediately.
+ *
  */
-void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle );
+void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle, BaseType_t xIsArbitrationMessage );
 
 /**
  * can_messenger.h

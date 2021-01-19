@@ -145,7 +145,7 @@ void CAN2_Init(void)
   can_filter.FilterMode = CAN_FILTERMODE_IDMASK;
   can_filter.FilterScale = CAN_FILTERSCALE_32BIT;
   can_filter.FilterIdHigh = 0x0000;
-  can_filter.FilterIdLow = 0xFFFF;
+  can_filter.FilterIdLow = 0x0000;
   can_filter.FilterMaskIdHigh = 0x0000;
   can_filter.FilterMaskIdLow = 0x0000;
   can_filter.FilterBank = 0;
@@ -153,9 +153,9 @@ void CAN2_Init(void)
   HAL_CAN_ConfigFilter(&hcan2, &can_filter);
 
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
-  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 1);
   HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
-  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 1);
   HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
