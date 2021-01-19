@@ -96,7 +96,6 @@ enum can_message_codes
 typedef struct
 {
     uint8_t uxMessageType;          /*< Contains info on the message type */
-    uint8_t uxExecCount;            /*< Execution count */
     uint8_t uxTaskState;            /*< Local task instance state, defined in projdefs.h */
     uint8_t uxCANNodeRole;          /*< Identifies the node role on the CAN bus */
     uint32_t uxID;                  /*< Task result: a single unsigned integer representing the exeuction result OR Node ID: CAN node ID */

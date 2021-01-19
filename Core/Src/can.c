@@ -30,11 +30,8 @@ QueueHandle_t send_queue;
 /* Assign an ID to the node */
 uint32_t can_node_id;
 
-/* CAN frame ID is 11 bit, so the 32 bit ID gets shifted */
-uint32_t can_node_id_frame;
-
 /* Node role selection */
-uint32_t can_node_role = CAN_NODE_PRIMARY;
+uint32_t can_node_role;
 
 /* USER CODE END 0 */
 
@@ -156,8 +153,10 @@ void CAN2_Init(void)
   HAL_CAN_ConfigFilter(&hcan2, &can_filter);
 
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
-  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 6);
+  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
+  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 0);
+  HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
   HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
@@ -176,22 +175,17 @@ void CAN2_Init(void)
 long CAN2_Send(CANSyncMessage_t * message)
 {
   long error_code = 0;
-  CANSyncMessage_t * can_message;
-  uint8_t send_buffer[8];
-  uint32_t tx_mailbox_number;
+  uint8_t send_buffer[8] = {0};
+  uint32_t tx_mailbox_number = 0;
   CAN_TxHeaderTypeDef header;
 
-  /* Convert CAN message structure to uint8_t array */
-  can_message = ( CANSyncMessage_t * ) message;
-
-  send_buffer[0] = can_message->uxMessageType;
-  send_buffer[1] = can_message->uxExecCount;
-  send_buffer[2] = can_message->uxTaskState;
-  send_buffer[3] = can_message->uxCANNodeRole;
-  memcpy(&send_buffer[4], & ( can_message->uxID ), 4);
+  send_buffer[0] = message->uxMessageType;
+  send_buffer[1] = message->uxTaskState;
+  send_buffer[2] = message->uxCANNodeRole;
+  memcpy(&send_buffer[3], &message->uxID, 4);
 
   /* Set up the HAL TX handle */
-  header.StdId = can_node_id;       /* Set up unique ID for each node */
+  header.StdId = can_node_role;     /* Set up unique ID for each node - frame wise */
   header.DLC = CAN_MESSAGE_BYTES;   /* Send 8 bytes*/
   header.IDE = CAN_ID_STD;          /* Standard identifier */
   header.RTR = CAN_RTR_DATA;        /* Can remote transmission request */
@@ -239,12 +233,11 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
   /* Convert uint8_t array to CAN message struct */
   can_message.uxMessageType = receive_buffer[0];
-  can_message.uxExecCount = receive_buffer[1];
-  can_message.uxTaskState = receive_buffer[2];
-  can_message.uxCANNodeRole = receive_buffer[3];
+  can_message.uxTaskState = receive_buffer[1];
+  can_message.uxCANNodeRole = receive_buffer[2];
 
   /* Use memcpy to extract id (uint32_t) from the buffer */
-  memcpy(&can_message.uxID, &receive_buffer[4], 4);
+  memcpy(&can_message.uxID, &receive_buffer[3], 4);
 
   /* Flip the GPIO state */
   gpio_led_toggle(LED4_GREEN_ID);
@@ -291,8 +284,15 @@ void CAN2_Register(void)
   can_node_id = HAL_GetREVID();
   canHandlers.uxNodeID = can_node_id;
 
-  /* 32 bit to 11 bit identifier for the actual CAN frame */
-  can_node_id_frame = can_node_id >> 21;
+  /* ########################### 
+   * TEST SETUP SPECIFIC CONFIGURATION
+   * ###########################
+   */
+  if (can_node_id == 8192) {
+    can_node_role = CAN_NODE_PRIMARY;
+  } else {
+    can_node_role = CAN_NODE_SECONDARY;
+  }
 
   /* Primary/secondary node selection (only one node can be primary) */
   canHandlers.uxCANNodeRole = can_node_role;

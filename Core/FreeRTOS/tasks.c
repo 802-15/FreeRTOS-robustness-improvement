@@ -1633,6 +1633,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
             #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
 
+                if ( configTIME_REDUNDANT_INSTANCES == 1 )
+                {
+                    break;
+                }
+
                 if ( i == configTIME_REDUNDANT_INSTANCES )
                 {
                     iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
@@ -1800,7 +1805,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         }
 
         /* Task CAN state is modifiable only at startup */
-        if ( xTaskGetSchedulerState() )
+        if ( xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED )
         {
             return;
         }
@@ -1814,10 +1819,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         /* Toggle the task CAN sync */
         if ( currentTCB->pxRedundantTask->uxTaskCANSync )
         {
-            currentTCB->pxRedundantTask->uxTaskCANSync = 1;
+            currentTCB->pxRedundantTask->uxTaskCANSync = 0;
         }
         else{
-            currentTCB->pxRedundantTask->uxTaskCANSync = 0;
+            currentTCB->pxRedundantTask->uxTaskCANSync = 1;
         }
 
         taskEXIT_CRITICAL();
