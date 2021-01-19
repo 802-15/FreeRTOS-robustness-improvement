@@ -89,8 +89,6 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* CAN2 interrupt Init */
-    HAL_NVIC_SetPriority(CAN2_TX_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(CAN2_TX_IRQn);
     HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
     HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 0, 0);
@@ -120,7 +118,6 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
     HAL_GPIO_DeInit(GPIOB, GPIO_PIN_12|GPIO_PIN_13);
 
     /* CAN2 interrupt Deinit */
-    HAL_NVIC_DisableIRQ(CAN2_TX_IRQn);
     HAL_NVIC_DisableIRQ(CAN2_RX0_IRQn);
     HAL_NVIC_DisableIRQ(CAN2_RX1_IRQn);
   /* USER CODE BEGIN CAN2_MspDeInit 1 */
@@ -155,9 +152,14 @@ void CAN2_Init(void)
   can_filter.FilterFIFOAssignment = CAN_RX_FIFO0;
   HAL_CAN_ConfigFilter(&hcan2, &can_filter);
 
+  /* Disable subpriority bits using this HAL->CMSIS call */
+  HAL_NVIC_SetPriorityGrouping(0);
+
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
-  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 6);
+  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
+  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 0);
+  HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
   HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);

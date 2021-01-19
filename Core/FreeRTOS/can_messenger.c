@@ -48,6 +48,25 @@ static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES] = {0};
 UBaseType_t uxCANDetectedNodes = 0;
 
 
+static void prvCANStartupSync( void )
+{
+    BaseType_t messages_received = pdFALSE;
+
+    for( ; ; )
+    {
+        messages_received = xCANReceiveSyncMessages();
+        if( messages_received == pdFALSE )
+        {
+            break;
+        }
+
+        if( uxCANDetectedNodes == CAN_MAXIMUM_NUMBER_OF_NODES -1 )
+        {
+            break;
+        }
+    }
+}
+
 BaseType_t xCANMessengerInit( void )
 {
     BaseType_t error_code = pdFAIL;
@@ -79,6 +98,9 @@ BaseType_t xCANMessengerInit( void )
     xCANSendStartStopMessage( pdPASS );
 
     error_code = pdPASS;
+
+    /* Loop and wait for other nodes */
+    prvCANStartupSync();
 
     return error_code;
 }

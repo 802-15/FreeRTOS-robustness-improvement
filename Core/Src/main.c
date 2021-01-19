@@ -59,7 +59,6 @@ char messageBuffer[256];
 int bss_variable;
 
 TaskHandle_t  blinkyHandle;
-TimerHandle_t blinkyTimerHandle;
 
 /* USER CODE END PV */
 
@@ -103,16 +102,6 @@ static void test_malloc(void)
   #endif
   user_free(allocated);
 }
-
-void vTimerCallback(TimerHandle_t xTimer)
- {
-  xTimerStop(xTimer, 0);
-
-  /* Resume the blinky task from timer callback */
-
-  SERIAL_PRINT("Unblocking task!");
-  vTaskResume(blinkyHandle);
- }
 
 void blinkyFailureTest(void)
 {
@@ -178,9 +167,6 @@ static void blinkTask(void *pvParameters)
 
     SERIAL_PRINT("Instance %d done", instanceNumber);
     xTaskInstanceDone( instanceNumber );
-
-    xTimerReset(blinkyTimerHandle, 0);
-    vTaskCallAPISynchronized( blinkyHandle, vTaskSuspend );
   }
 }
 
@@ -210,11 +196,11 @@ int main(void)
   /* Demonstration failure handle is registered */
   vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
 
-  /* Task unblock timer */
-  blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
-
   /* Set up CAN details for FreeRTOS in the application layer */
   CAN2_Register();
+
+  /* Register the task on the CAN */
+  vTaskCANRegister(blinkyHandle);
 
   vTaskStartScheduler();
 }

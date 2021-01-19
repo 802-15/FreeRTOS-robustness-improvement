@@ -3,7 +3,6 @@ Mcu.Family=STM32F4
 RCC.PLLSourceVirtual=RCC_PLLSOURCE_HSE
 ProjectManager.MainLocation=Core/Src
 CAN2.CalculateBaudRate=140625
-NVIC.CAN2_TX_IRQn=true\:0\:0\:false\:false\:true\:true\:true
 ProjectManager.ProjectFileName=FreeRTOS_robustness_improvement.ioc
 PH0-OSC_IN.Signal=RCC_OSC_IN
 RCC.CortexFreq_Value=72000000

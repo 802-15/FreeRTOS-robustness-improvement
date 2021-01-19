@@ -1814,10 +1814,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         /* Toggle the task CAN sync */
         if ( currentTCB->pxRedundantTask->uxTaskCANSync )
         {
-            currentTCB->pxRedundantTask->uxTaskCANSync = 1;
+            currentTCB->pxRedundantTask->uxTaskCANSync = 0;
         }
         else{
-            currentTCB->pxRedundantTask->uxTaskCANSync = 0;
+            currentTCB->pxRedundantTask->uxTaskCANSync = 1;
         }
 
         taskEXIT_CRITICAL();
@@ -2845,6 +2845,11 @@ void vTaskStartScheduler( void )
 {
     BaseType_t xReturn;
 
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        /* Start up the CAN transciver and message queues */
+        xReturn = xCANMessengerInit();
+    #endif
+
     /* Add the idle task at the lowest priority. */
     #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
         {
@@ -2906,11 +2911,6 @@ void vTaskStartScheduler( void )
             }
         }
     #endif /* configUSE_TIMERS */
-
-    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-        /* Start up the CAN transciver and message queues */
-        xReturn = xCANMessengerInit();
-    #endif
 
     if( xReturn == pdPASS )
     {
