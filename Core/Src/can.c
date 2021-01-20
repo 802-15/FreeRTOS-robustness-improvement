@@ -22,10 +22,9 @@
 
 /* USER CODE BEGIN 0 */
 
-/* CAN send/receive queue pointers. These pointers are passed to FreeRTOS
+/* CAN receive queue pointer. This pointer is passed to FreeRTOS
  * where the queue content is accessed. */
 QueueHandle_t receive_queue;
-QueueHandle_t send_queue;
 
 /* Assign an ID to the node */
 uint32_t can_node_id;
@@ -300,14 +299,13 @@ void CAN2_Register(void)
   /* Create send and receive queues; no checks */
   element_size = xCANElementSize();
   receive_queue = xQueueCreate(CAN_QUEUE_LENGTH, element_size);
-  send_queue = xQueueCreate(CAN_QUEUE_LENGTH, element_size);
 
   /* Register CAN handlers for FreeRTOS */
   canHandlers.pvCANInitFunc = CAN2_Init;
   canHandlers.pvCANDeInitFunc = CAN2_DeInit;
   canHandlers.pvCANSendFunc = CAN2_Send;
 
-  vCANRegister(&canHandlers, send_queue, receive_queue);
+  vCANRegister(&canHandlers, receive_queue);
 }
 
 /* USER CODE END 1 */

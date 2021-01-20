@@ -46,6 +46,7 @@
 
 /* CAN message length in bytes */
 #define CAN_MESSAGE_BYTES 7
+/* 4 bytes in a single message are reserved for node ID or task result */
 #define CAN_ID_BYTES 4
 
 /* Suggested queue length, it might need to be adjusted to suit the application needs */
@@ -147,7 +148,7 @@ BaseType_t xCANMessengerInit( void );
  * </pre>
  *
  * Called from the scheduler end function to stop the can transciever
- * and reset the send/receive queues.
+ * and reset the receive queue.
  *
  */
 void vCANMessengerDeinit( void );
@@ -156,7 +157,6 @@ void vCANMessengerDeinit( void );
  * can_messenger.h
  * <pre>
  * void vCANRegister( CANHandlers_t * pxHandlers,
-                      QueueHandle_t xSendQueue,
                       QueueHandle_t xReceiveQueue );
  * </pre>
  *
@@ -169,13 +169,10 @@ void vCANMessengerDeinit( void );
  *
  * @param pxHandlers Pointer to CAN handlers array containing function pointers
  *
- * @param xSendQueue Send queue pointer, it must be created in the application layer
- *
  * @param xReceiveQueue Receive queue pointer, created in the application layer
  *
  */
 void vCANRegister( CANHandlers_t * pxHandlers,
-                   QueueHandle_t xSendQueue,
                    QueueHandle_t xReceiveQueue );
 
 /**

@@ -36,9 +36,8 @@
 volatile BaseType_t xCANReceiveErrno;
 volatile BaseType_t xCANSendErrno;
 
-/* Global CAN send and receive queue pointers, must be prepared in the application layer */
+/* Global CAN receive queue pointer, must be prepared in the application layer */
 static QueueHandle_t xCANReceiveQueue;
-static QueueHandle_t xCANSendQueue;
 
 /* CAN handlers for this platform are stored in this global structure */
 static CANHandlers_t xCANHandlers;
@@ -71,13 +70,8 @@ BaseType_t xCANMessengerInit( void )
 {
     BaseType_t error_code = pdFAIL;
 
-    /* Check if Queues are initialized */
+    /* Check if queue is created */
     if ( !xCANReceiveQueue || uxQueueMessagesWaiting( xCANReceiveQueue ) )
-    {
-        return error_code;
-    }
-
-    if ( !xCANSendQueue || uxQueueMessagesWaiting( xCANSendQueue ) )
     {
         return error_code;
     }
@@ -114,17 +108,15 @@ void vCANMessengerDeinit( void )
     xCANHandlers.pvCANDeInitFunc();
 
     xQueueReset( xCANReceiveQueue );
-    xQueueReset( xCANSendQueue );
 
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
 }
 
-void vCANRegister( CANHandlers_t * pxHandlers, QueueHandle_t xSendQueue, QueueHandle_t xReceiveQueue )
+void vCANRegister( CANHandlers_t * pxHandlers, QueueHandle_t xReceiveQueue )
 {
     taskENTER_CRITICAL();
     /* Store pointers to queues */
     xCANReceiveQueue = xReceiveQueue;
-    xCANSendQueue = xSendQueue;
 
     /* Assign handles to the global CAN handles structre */
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
@@ -167,14 +159,6 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
     xMessage.uxCANNodeRole = xCANHandlers.uxCANNodeRole;
     xMessage.uxID = xCANHandlers.uxNodeID;
 
-#if 0
-    error_code = xQueueSendToBack( xCANSendQueue, &xMessage, 0 );
-    if( error_code == pdFAIL )
-    {
-        return error_code;
-    }
-#endif
-
     error_code = xCANHandlers.pvCANSendFunc( &xMessage );
     return error_code;
 }
@@ -186,14 +170,6 @@ BaseType_t xCANSendSyncMessage( CANSyncMessage_t * pxMessage )
     BaseType_t error_code = pdFAIL;
 
     pxMessage->uxCANNodeRole = xCANHandlers.uxCANNodeRole;
-
-#if 0
-    error_code = xQueueSendToBack( xCANSendQueue, pxMessage, 0 );
-    if ( error_code == pdFAIL )
-    {
-        return error_code;
-    }
-#endif
 
     error_code = xCANHandlers.pvCANSendFunc( pxMessage );
     return error_code;
