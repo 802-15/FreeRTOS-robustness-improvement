@@ -167,11 +167,13 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
     xMessage.uxCANNodeRole = xCANHandlers.uxCANNodeRole;
     xMessage.uxID = xCANHandlers.uxNodeID;
 
+#if 0
     error_code = xQueueSendToBack( xCANSendQueue, &xMessage, 0 );
     if( error_code == pdFAIL )
     {
         return error_code;
     }
+#endif
 
     error_code = xCANHandlers.pvCANSendFunc( &xMessage );
     return error_code;
@@ -185,11 +187,13 @@ BaseType_t xCANSendSyncMessage( CANSyncMessage_t * pxMessage )
 
     pxMessage->uxCANNodeRole = xCANHandlers.uxCANNodeRole;
 
+#if 0
     error_code = xQueueSendToBack( xCANSendQueue, pxMessage, 0 );
     if ( error_code == pdFAIL )
     {
         return error_code;
     }
+#endif
 
     error_code = xCANHandlers.pvCANSendFunc( pxMessage );
     return error_code;
@@ -262,7 +266,7 @@ BaseType_t xCANReceiveSyncMessages( void )
                 /* A task finished executing - store the result or ignore
                  * the message if this is  a secondary node.
                  */
-                if ( xMessage.uxCANNodeRole == CAN_NODE_PRIMARY )
+                if ( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
                 {
                     vTaskRemoteData( xMessage.uxTaskState, xMessage.uxID, CAN_MESSAGE_SYNC );
                 }
@@ -272,7 +276,7 @@ BaseType_t xCANReceiveSyncMessages( void )
                 /* An arbitration message with the correct result was
                  * received. Task behaviour will be modified in tasks.c
                  */
-                if ( xMessage.uxCANNodeRole == CAN_NODE_SECONDARY )
+                if ( xCANHandlers.uxCANNodeRole == CAN_NODE_SECONDARY )
                 {
                     vTaskRemoteData( xMessage.uxTaskState, xMessage.uxID, CAN_MESSAGE_ARBITRATION );
                 }
@@ -323,6 +327,8 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
         {
             message_sent = xCANSendSyncMessage( pxMessage );
         }
+
+        portYIELD_WITHIN_API();
     }
 }
 

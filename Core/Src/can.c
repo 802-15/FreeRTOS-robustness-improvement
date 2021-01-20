@@ -175,7 +175,7 @@ void CAN2_Init(void)
 long CAN2_Send(CANSyncMessage_t * message)
 {
   long error_code = 0;
-  uint8_t send_buffer[8] = {0};
+  uint8_t send_buffer[7] = {0};
   uint32_t tx_mailbox_number = 0;
   CAN_TxHeaderTypeDef header;
 
@@ -186,7 +186,7 @@ long CAN2_Send(CANSyncMessage_t * message)
 
   /* Set up the HAL TX handle */
   header.StdId = can_node_role;     /* Set up unique ID for each node - frame wise */
-  header.DLC = CAN_MESSAGE_BYTES;   /* Send 8 bytes*/
+  header.DLC = CAN_MESSAGE_BYTES;   /* Send 7 bytes*/
   header.IDE = CAN_ID_STD;          /* Standard identifier */
   header.RTR = CAN_RTR_DATA;        /* Can remote transmission request */
 
@@ -214,7 +214,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   int error_code = 0;
   CANSyncMessage_t can_message = {0};
-  uint8_t receive_buffer[8];
+  uint8_t receive_buffer[7];
   CAN_RxHeaderTypeDef receive_header;
 
   /* New message has arrived to FIF0_0, move it to the FreeRTOS queue */

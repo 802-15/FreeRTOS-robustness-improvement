@@ -45,7 +45,7 @@
 
 
 /* CAN message length in bytes */
-#define CAN_MESSAGE_BYTES 8
+#define CAN_MESSAGE_BYTES 7
 #define CAN_ID_BYTES 4
 
 /* Suggested queue length, it might need to be adjusted to suit the application needs */

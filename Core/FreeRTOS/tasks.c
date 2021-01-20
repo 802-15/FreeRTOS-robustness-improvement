@@ -1683,7 +1683,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     /* Send an arbitration message to the other instances  */
                     xMessage.uxMessageType = CAN_MESSAGE_ARBITRATION;
                     xMessage.uxTaskState = xRemoteTaskState;
-                    xMessage.uxID = uxExecResult;
+                    xMessage.uxID = uxMajorityResult;
                     xCANSendSyncMessage( &xMessage );
                 }
                 else
@@ -1699,6 +1699,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     vCANSendReceive( currentTCB->pxRedundantTask->pxBarrierHandle, &xMessage );
                     taskENTER_CRITICAL();
                 }
+                /* Restart the remote task counter */
+                xReceivedResults = 0;
             }
         #endif /* configUSE_SPATIAL_REDUNDANCY */
 
