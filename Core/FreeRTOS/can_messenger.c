@@ -32,9 +32,8 @@
 #include "can_messenger.h"
 
 
-/* Errno variables are set in the HAL functions (application layer) */
+/* Receive errno is set inside the CAN receive interrupt if an error occured. */
 volatile BaseType_t xCANReceiveErrno;
-volatile BaseType_t xCANSendErrno;
 
 /* Global CAN receive queue pointer, must be prepared in the application layer */
 static QueueHandle_t xCANReceiveQueue;
@@ -43,32 +42,16 @@ static QueueHandle_t xCANReceiveQueue;
 static CANHandlers_t xCANHandlers;
 
 /* Keep track of the nodes detected on the CAN bus */
+static SemaphoreHandle_t xCANNodesMutex = NULL;
 static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
-UBaseType_t uxCANDetectedNodes = 0;
+static UBaseType_t uxCANDetectedNodes = 0;
 
-
-static void prvCANStartupSync( void )
-{
-    BaseType_t messages_received = pdFALSE;
-
-    for( ; ; )
-    {
-        messages_received = xCANReceiveSyncMessages();
-        if( messages_received == pdFALSE )
-        {
-            break;
-        }
-
-        if( uxCANDetectedNodes == CAN_MAXIMUM_NUMBER_OF_NODES -1 )
-        {
-            break;
-        }
-    }
-}
 
 BaseType_t xCANMessengerInit( void )
 {
+    /* !!!This function should run in a critical section!!! */
     BaseType_t error_code = pdFAIL;
+    BaseType_t messages_received = pdFAIL;
 
     /* Check if queue is created */
     if ( !xCANReceiveQueue || uxQueueMessagesWaiting( xCANReceiveQueue ) )
@@ -78,6 +61,13 @@ BaseType_t xCANMessengerInit( void )
 
     /* Check if the handlers were properly registered */
     if ( !xCANHandlers.pvCANInitFunc || !xCANHandlers.pvCANDeInitFunc || !xCANHandlers.pvCANSendFunc )
+    {
+        return error_code;
+    }
+
+    /* CAN node globals protection mutex */
+    xCANNodesMutex = xSemaphoreCreateMutex();
+    if ( !xCANNodesMutex )
     {
         return error_code;
     }
@@ -94,7 +84,21 @@ BaseType_t xCANMessengerInit( void )
     error_code = pdPASS;
 
     /* Loop and wait for other nodes */
-    prvCANStartupSync();
+    for( ; ; )
+    {
+        /* Process messages to store info on other nodes */
+        messages_received = xCANReceiveSyncMessages();
+        if( messages_received == pdFALSE )
+        {
+            break;
+        }
+
+        /* Break from the loop when all the remote nodes are detected */
+        if( uxCANDetectedNodes == CAN_MAXIMUM_NUMBER_OF_NODES -1 )
+        {
+            break;
+        }
+    }
 
     return error_code;
 }
@@ -144,7 +148,7 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
     BaseType_t error_code = pdFAIL;
     CANSyncMessage_t xMessage = {0};
 
-    if( xCANHandlers.uxCANStatus == CAN_STATUS_FAILED )
+    if( xCANHandlers.uxCANStatus != CAN_STATUS_OK )
         return error_code;
 
     if( uxMessageIsStartup == pdPASS )
@@ -201,42 +205,53 @@ BaseType_t xCANReceiveSyncMessages( void )
         switch ( xMessage.uxMessageType )
         {
             case CAN_MESSAGE_STARTUP:
-                for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
+                if ( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
                 {
-                    if ( xMessage.uxID == prvNodeIDArray[i] )
+                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        /* Node already registered locally, discard it */
-                        break;
+                        if ( xMessage.uxID == prvNodeIDArray[i] )
+                        {
+                            /* Node already registered locally, discard it */
+                            xSemaphoreGive( xCANNodesMutex );
+                            break;
+                        }
                     }
-                }
-                /* A new node has appeared, copy the ID */
-                for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
-                {
-                    if ( prvNodeIDArray[i] == 0 )
+                    /* A new node has appeared, copy the ID */
+                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        prvNodeIDArray[i] = xMessage.uxID;
-                        uxCANDetectedNodes++;
+                        if ( prvNodeIDArray[i] == 0 )
+                        {
+                            prvNodeIDArray[i] = xMessage.uxID;
+                            uxCANDetectedNodes++;
 
-                        /* Send back our own message startup */
-                        xCANSendStartStopMessage( pdTRUE );
-                        break;
+                            /* Send back our own message startup */
+                            xCANSendStartStopMessage( pdTRUE );
+                            xSemaphoreGive( xCANNodesMutex );
+                            break;
+                        }
                     }
+                    xSemaphoreGive( xCANNodesMutex );
+                    break;
                 }
-                break;
 
             case CAN_MESSAGE_STOP:
-                for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
+                if ( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
                 {
-                    if ( xMessage.uxID == prvNodeIDArray[i] )
+                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        /* Remove the node from internal list */
-                        prvNodeIDArray[i] = 0;
-                        uxCANDetectedNodes--;
-                        break;
+                        if ( xMessage.uxID == prvNodeIDArray[i] )
+                        {
+                            /* Remove the node from internal list */
+                            prvNodeIDArray[i] = 0;
+                            uxCANDetectedNodes--;
+                            xSemaphoreGive( xCANNodesMutex );
+                            break;
+                        }
                     }
+                    /* Ignore this message since the node is not present */
+                    xSemaphoreGive( xCANNodesMutex );
+                    break;
                 }
-                /* Ignore this message since the node is not present */
-                break;
 
             case CAN_MESSAGE_SYNC:
                 /* A task finished executing - store the result or ignore

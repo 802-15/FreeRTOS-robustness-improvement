@@ -46,6 +46,7 @@
 
 /* CAN message length in bytes */
 #define CAN_MESSAGE_BYTES 7
+
 /* 4 bytes in a single message are reserved for node ID or task result */
 #define CAN_ID_BYTES 4
 
@@ -55,16 +56,8 @@
 /* Number of nodes to be expected */
 #define CAN_MAXIMUM_NUMBER_OF_NODES configCAN_NODES
 
-/* These errno variables can be set inside the HAL CAN routines if the
- * messages rx/tx fails on the hardware level
- */
+/* Receive errno is set inside the CAN receive interrupt if an error occured. */
 extern volatile BaseType_t xCANReceiveErrno;
-extern volatile BaseType_t xCANSendErrno;
-
-/* Number of detected CAN nodes must be available outside of this module,
- * for barrier functions
- */
-extern UBaseType_t uxCANDetectedNodes;
 
 /* CAN status */
 enum can_transciever_states
