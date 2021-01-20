@@ -93,7 +93,7 @@ to exclude the API function. */
 /* Enable time redundancy: set up multiple task instances with xTaskCreate */
 #define configUSE_TEMPORAL_REDUNDANCY		1
 /* Number of task instances to be created */
-#define configTIME_REDUNDANT_INSTANCES		1
+#define configTIME_REDUNDANT_INSTANCES		2
 
 /* Enable spatial redundancy: tasks are synchronized across multiple CPUs */
 #define configUSE_SPATIAL_REDUNDANCY		1

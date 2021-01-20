@@ -1715,7 +1715,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             {
                 /* While running the failure callback the thread can be interrupted
                  * in favour of running other tasks (interrupts are required for normal
-                 * scheduler operation) */
+                 * scheduler operation)
+                 */
                 taskEXIT_CRITICAL();
                 currentTCB->pxRedundantTask->pvFailureFunc();
                 taskENTER_CRITICAL();
@@ -2867,11 +2868,6 @@ void vTaskStartScheduler( void )
 {
     BaseType_t xReturn;
 
-    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
-        /* Start up the CAN transciver and message queues */
-        xReturn = xCANMessengerInit();
-    #endif
-
     /* Add the idle task at the lowest priority. */
     #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
         {
@@ -2943,6 +2939,16 @@ void vTaskStartScheduler( void )
             {
                 freertos_tasks_c_additions_init();
             }
+        #endif
+
+        #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+            /* CAN startup sync is done in the critical section to prevent
+            * tasks from executing while waiting for CAN messages.
+            */
+            taskENTER_CRITICAL();
+            /* Start up the CAN transciver and message queues */
+            xReturn = xCANMessengerInit();
+            taskEXIT_CRITICAL();
         #endif
 
         /* Interrupts are turned off here, to ensure a tick does not occur
