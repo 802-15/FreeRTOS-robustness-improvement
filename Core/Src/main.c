@@ -166,7 +166,7 @@ static void blinkTask(void *pvParameters)
     vTaskDelay(xDelay);
 
     SERIAL_PRINT("Instance %d done", instanceNumber);
-    xTaskInstanceDone( instanceNumber );
+    xTaskInstanceDone( 0 );//instanceNumber );
   }
 }
 

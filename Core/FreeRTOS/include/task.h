@@ -486,10 +486,22 @@ typedef void (* TaskAPICode_t ) ( TaskHandle_t );
  * BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
  * </pre>
  *
- * Explicitly mark the end of one instance of the task. The instance
- * can be set to the completed ('DONE') state by passing pdPASS or
- * it can set to the failed state by passing any other integer. The redundant
- * task threads will synchronize inside this function.
+ * Explicitly mark the end of one instance of the task. The result of the
+ * currently running instance is sent using the only function argument.
+ *
+ * There are two distinct task instance types:
+ * 1) LOCAL task instances - executed locally, these instances will be marked
+ * as "failed" if their execution results differ.
+ * 2) REMOTE task instances - their results obtained using CAN messages,
+ * and are available from a global array in tasks.c
+ *
+ * The LOCAL will block until they all reach this funtion or until the
+ * barrier watchdog timer is triggered.
+ *
+ * The remote threads will block until both syncrhonization and arbitration
+ * messages are exchanged.
+ *
+ * If local OR or remote threads fail, the failure handle will be executed.
  *
  * @param uxExecResult This variable stores the task execution result for the
  * current instance
