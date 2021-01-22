@@ -46,9 +46,9 @@ static SemaphoreHandle_t xCANNodesMutex = NULL;
 static UBaseType_t uxCANDetectedNodes = 0;
 
 #if ( configCAN_NODES == 1 )
-    static uint32_t prvNodeIDArray[1] = {2};
+    static uint32_t prvNodeIDArray[1] = {0};
 #else
-    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {2};
+    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
 #endif /* configCAN_NODES */
 
 
@@ -83,7 +83,7 @@ BaseType_t xCANMessengerInit( void )
     xCANHandlers.uxCANStatus = CAN_STATUS_OK;
 
     /* Send a CAN init message */
-    xCANSendStartStopMessage( pdPASS );
+    xCANSendStartStopMessage( pdTRUE );
 
     for( ; ; )
     {
@@ -108,7 +108,7 @@ BaseType_t xCANMessengerInit( void )
 void vCANMessengerDeinit( void )
 {
     /* Send a can stop message */
-    xCANSendStartStopMessage( pdFAIL );
+    xCANSendStartStopMessage( pdFALSE );
 
     /* Stop the can transciever */
     xCANHandlers.pvCANDeInitFunc();
@@ -211,28 +211,22 @@ BaseType_t xCANReceiveSyncMessages( void )
                 {
                     for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        if ( xMessage.uxID == prvNodeIDArray[i] )
+                        if ( xMessage.uxID == prvNodeIDArray[i])
                         {
-                            /* Node already registered locally, discard it */
-                            xSemaphoreGive( xCANNodesMutex );
                             break;
                         }
-                    }
-                    /* A new node has appeared, copy the ID */
-                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
-                    {
-                        if ( prvNodeIDArray[i] == 0 )
+                        if ( prvNodeIDArray[i] == 0 && xMessage.uxID != xCANHandlers.uxNodeID )
                         {
+                            /* A new node has appeared, copy the ID */
                             prvNodeIDArray[i] = xMessage.uxID;
                             uxCANDetectedNodes++;
-
-                            /* Send back our own message startup */
-                            xCANSendStartStopMessage( pdTRUE );
-                            xSemaphoreGive( xCANNodesMutex );
                             break;
                         }
                     }
                     xSemaphoreGive( xCANNodesMutex );
+
+                    /* Always respond with a start message of your own */
+                    xCANSendStartStopMessage( pdTRUE );
                     break;
                 }
 
@@ -244,7 +238,7 @@ BaseType_t xCANReceiveSyncMessages( void )
                         if ( xMessage.uxID == prvNodeIDArray[i] )
                         {
                             /* Remove the node from internal list */
-                            prvNodeIDArray[i] = 2;
+                            prvNodeIDArray[i] = 0;
                             uxCANDetectedNodes--;
                             xSemaphoreGive( xCANNodesMutex );
                             break;
