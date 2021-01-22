@@ -43,13 +43,17 @@ static CANHandlers_t xCANHandlers;
 
 /* Keep track of the nodes detected on the CAN bus */
 static SemaphoreHandle_t xCANNodesMutex = NULL;
-static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
 static UBaseType_t uxCANDetectedNodes = 0;
+
+#if ( configCAN_NODES == 1 )
+    static uint32_t prvNodeIDArray[1] = {0}
+#else
+    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
+#endif /* configCAN_NODES */
 
 
 BaseType_t xCANMessengerInit( void )
 {
-    /* !!!This function should run in a critical section!!! */
     BaseType_t error_code = pdFAIL;
     BaseType_t messages_received = pdFAIL;
 
@@ -81,9 +85,6 @@ BaseType_t xCANMessengerInit( void )
     /* Send a CAN init message */
     xCANSendStartStopMessage( pdPASS );
 
-    error_code = pdPASS;
-
-    /* Loop and wait for other nodes */
     for( ; ; )
     {
         /* Process messages to store info on other nodes */
@@ -100,6 +101,7 @@ BaseType_t xCANMessengerInit( void )
         }
     }
 
+    error_code = pdPASS;
     return error_code;
 }
 
@@ -307,19 +309,17 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
             break;
         }
 
-        /* Break from the loop if the barrier is released */
-        if ( !pxBarrierHandle->uxRemoteCounter )
-        {
-            break;
-        }
-
         /* Re-send local status */
         if( message_sent == pdFAIL && pxMessage )
         {
             message_sent = xCANSendSyncMessage( pxMessage );
         }
 
-        portYIELD_WITHIN_API();
+        /* Break from the loop if the barrier is released */
+        if ( !pxBarrierHandle->uxRemoteCounter )
+        {
+            break;
+        }
     }
 }
 

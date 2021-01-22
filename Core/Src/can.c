@@ -66,6 +66,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
   if(canHandle->Instance==CAN2)
   {
   /* USER CODE BEGIN CAN2_MspInit 0 */
+  #if 0
 
   /* USER CODE END CAN2_MspInit 0 */
     /* CAN2 clock enable */
@@ -90,7 +91,32 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
   /* USER CODE BEGIN CAN2_MspInit 1 */
+  #endif
 
+  /* Important: HAL_NVIC_EnableIRQ must not be allowed to set up
+   * highest priority for the CAN peripheral! This will result in
+   * poorly configured interrupts and unpredictable behaviour.
+   */
+
+    /* CAN2 clock enable */
+    __HAL_RCC_CAN2_CLK_ENABLE();
+    __HAL_RCC_CAN1_CLK_ENABLE();
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    /**CAN2 GPIO Configuration
+    PB12     ------> CAN2_RX
+    PB13     ------> CAN2_TX
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF9_CAN2;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* Correct interrupts must be set up to be between
+   * configKERNEL_INTERRUPT_PRIORITY and
+   * configMAX_SYSCALL_INTERRUPT_PRIOTIY*/
   /* USER CODE END CAN2_MspInit 1 */
   }
 }
@@ -152,9 +178,9 @@ void CAN2_Init(void)
   HAL_NVIC_SetPriorityGrouping(0);
 
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
-  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 90, 0U);
   HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
-  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 90, 0U);
   HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   /* Set up notifications for the interrupt mode: message pending in FIF0 */

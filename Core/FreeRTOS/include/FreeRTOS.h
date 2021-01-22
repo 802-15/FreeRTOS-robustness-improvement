@@ -312,6 +312,10 @@
         #define configCAN_NODES 2
     #endif
 
+    #if ( configCAN_NODES < 1 || configCAN_NODES > 3 )
+        #error configCAN_NODES must be between 1 and 3!
+    #endif
+
 #endif /* configUSE_SPATIAL_REDUNDANCY */
 
 #if configMAX_TASK_NAME_LEN < 1
