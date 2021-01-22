@@ -396,7 +396,7 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tas
 
     static TCB_t * pxCANTask = NULL;                                            /* Pointer to a single CAN task */
     static BaseType_t xReceivedResults = 0;                                     /* Number of received task results */
-    BaseType_t xReceivedResult = 0;                                             /* Result received from the remote threads */
+    static BaseType_t xArbitrationResult = 0;                                   /* Result received from the remote threads */
 
     #if ( configCAN_NODES == 1 )
         static uint32_t uxTaskResults[1];                                       /* Dummy array */
@@ -1677,7 +1677,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     if( currentTCB->pxRedundantTask->uxRemoteState == pdFREERTOS_INSTANCE_DONE )
                     {
                         /* If the results do not match the 'correct' solution, then we fail */
-                        if( ( UBaseType_t ) xReceivedResult != uxExecResult )
+                        if( ( UBaseType_t ) xArbitrationResult != uxExecResult )
                         {
                             xRemoteTaskState = pdFREERTOS_INSTANCE_FAILED;
                         }
@@ -1839,12 +1839,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             if( uxTaskState == pdFREERTOS_INSTANCE_DONE )
             {
                 pxCANTask->pxRedundantTask->uxRemoteState = pdFREERTOS_INSTANCE_DONE;
-                xReceivedResult = uxTaskResult;
+                xArbitrationResult = uxTaskResult;
             }
             else
             {
                 pxCANTask->pxRedundantTask->uxRemoteState = pdFREERTOS_INSTANCE_FAILED;
-                xReceivedResult = 0;
+                xArbitrationResult = 0;
             }
 
             /* Immediately release the barrier */

@@ -312,8 +312,8 @@
         #define configCAN_NODES 2
     #endif
 
-    #if ( configCAN_NODES < 1 || configCAN_NODES > 3 )
-        #error configCAN_NODES must be between 1 and 3!
+    #if ( configCAN_NODES < 2 || configCAN_NODES > 3 )
+        #error configCAN_NODES option must be 2 or 3!
     #endif
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */

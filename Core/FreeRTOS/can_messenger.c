@@ -46,9 +46,9 @@ static SemaphoreHandle_t xCANNodesMutex = NULL;
 static UBaseType_t uxCANDetectedNodes = 0;
 
 #if ( configCAN_NODES == 1 )
-    static uint32_t prvNodeIDArray[1] = {0}
+    static uint32_t prvNodeIDArray[1] = {2};
 #else
-    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
+    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {2};
 #endif /* configCAN_NODES */
 
 
@@ -244,7 +244,7 @@ BaseType_t xCANReceiveSyncMessages( void )
                         if ( xMessage.uxID == prvNodeIDArray[i] )
                         {
                             /* Remove the node from internal list */
-                            prvNodeIDArray[i] = 0;
+                            prvNodeIDArray[i] = 2;
                             uxCANDetectedNodes--;
                             xSemaphoreGive( xCANNodesMutex );
                             break;
