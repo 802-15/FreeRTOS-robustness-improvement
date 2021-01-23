@@ -55,7 +55,7 @@
 #define configTICK_RATE_HZ						( ( TickType_t ) 1000 )
 #define configMAX_PRIORITIES					( 5 )
 #define configMINIMAL_STACK_SIZE				( ( unsigned short ) 256 )
-#define configTOTAL_HEAP_SIZE					( ( size_t ) ( 80 * 1024 ) )
+#define configTOTAL_HEAP_SIZE					( ( size_t ) ( 32 * 1024 ) )
 #define configMAX_TASK_NAME_LEN					( 20 )
 #define configUSE_TRACE_FACILITY				0
 #define configUSE_16_BIT_TICKS					0
@@ -97,8 +97,6 @@ to exclude the API function. */
 
 /* Enable spatial redundancy: tasks are synchronized across multiple CPUs */
 #define configUSE_SPATIAL_REDUNDANCY		1
-/* Tune the CAN queue length to application needs: must scale with the number of tasks */
-#define configCAN_QUEUE_LENGTH				10
 /* The number of physical nodes must match this configuration option */
 #define configCAN_NODES						2
 

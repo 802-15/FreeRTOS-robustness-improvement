@@ -79,8 +79,11 @@ BaseType_t xCANMessengerInit( void )
     uxCANDetectedNodes = 0;
 
     /* Run the CAN init function */
-    xCANHandlers.pvCANInitFunc();
-    xCANHandlers.uxCANStatus = CAN_STATUS_OK;
+    if( xCANHandlers.uxCANStatus != CAN_STATUS_OK )
+    {
+        xCANHandlers.pvCANInitFunc();
+        xCANHandlers.uxCANStatus = CAN_STATUS_OK;
+    }
 
     /* Send a CAN init message */
     xCANSendStartStopMessage( pdTRUE );
@@ -220,13 +223,12 @@ BaseType_t xCANReceiveSyncMessages( void )
                             /* A new node has appeared, copy the ID */
                             prvNodeIDArray[i] = xMessage.uxID;
                             uxCANDetectedNodes++;
+                            /* Always respond with a start message of your own */
+                            xCANSendStartStopMessage( pdTRUE );
                             break;
                         }
                     }
                     xSemaphoreGive( xCANNodesMutex );
-
-                    /* Always respond with a start message of your own */
-                    xCANSendStartStopMessage( pdTRUE );
                     break;
                 }
 

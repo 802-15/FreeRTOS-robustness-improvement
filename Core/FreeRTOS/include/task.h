@@ -357,6 +357,18 @@ typedef void (* TaskFailureFunction_t ) ( void );
  */
 typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 
+/*
+ * This is used to pass user defined failure handles to FreeRTOS.
+ * After an instance is done executing, the task state will be evaluated
+ * and the appropriate function will be called.
+ */
+typedef struct
+{
+    TaskFailureFunction_t pvLocalFailureFunc;   /* Local time-redundant results differ */
+    TaskFailureFunction_t pvRemoteFailureFunc;  /* Remote (CAN) results differ */
+    TaskFailureFunction_t pvRemoteTimeoutFunc;  /* Remote (CAN) message timeout */
+} failureHandles_t;
+
 /**
  * task.h
  * <pre>
@@ -432,23 +444,24 @@ typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 /**
  * task.h
  * <pre>
- * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
- *                                    TaskFailureFunction_t pvFailureFunc );
+ *  void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
+ *                                     failureHandles_t * pxFailureHandles );
  * </pre>
  *
- * Register failure function for a redundant task.
+ * Register failure functions for the redundant task.
  *
- * The function pointer must be supplied in the argument. The function itself should run
- * some kind of error handling defined by the user.
+ * The function pointer must be supplied in the struct argument.
+ * The function itself should run some kind of error handling
+ * defined by the user.
  *
  *
  * @param taskHandle Redundant task handle
  *
- * @param pvFailureFunc Pointer to the failure function.
+ * @param pxFailureHandles Pointer to struct containing all the failure function pointers
  *
  */
-    void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
-                                       TaskFailureFunction_t pvFailureFunc );
+    void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
+                                       failureHandles_t * pxFailureHandles );
 
 /**
  * task.h

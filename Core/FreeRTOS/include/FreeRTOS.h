@@ -304,7 +304,7 @@
     /* Default option for the CAN queue length: if it is too small,
      * messages might be missed */
     #ifndef configCAN_QUEUE_LENGTH
-        #define configCAN_QUEUE_LENGTH 20
+        #define configCAN_QUEUE_LENGTH 10
     #endif
 
     /* This must match the number of nodes on the network */

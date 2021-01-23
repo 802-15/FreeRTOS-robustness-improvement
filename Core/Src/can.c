@@ -174,15 +174,6 @@ void CAN2_Init(void)
   can_filter.FilterFIFOAssignment = CAN_RX_FIFO0;
   HAL_CAN_ConfigFilter(&hcan2, &can_filter);
 
-  /* Disable subpriority bits using this HAL->CMSIS call */
-  HAL_NVIC_SetPriorityGrouping(0);
-
-  /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
-  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 90, 0U);
-  HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
-  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 90, 0U);
-  HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
-
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
   HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 
@@ -330,6 +321,21 @@ void CAN2_Register(void)
   canHandlers.pvCANInitFunc = CAN2_Init;
   canHandlers.pvCANDeInitFunc = CAN2_DeInit;
   canHandlers.pvCANSendFunc = CAN2_Send;
+
+  /*
+   * NVIC subpriority bits must be disabled before calling
+   * vTaskStart scheduler, so they are placed in the CAN register
+   * function.
+   */
+
+  /* Disable subpriority bits using this HAL->CMSIS call */
+  HAL_NVIC_SetPriorityGrouping(0);
+
+  /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
+  HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 90, 0U);
+  HAL_NVIC_EnableIRQ(CAN2_RX0_IRQn);
+  HAL_NVIC_SetPriority(CAN2_RX1_IRQn, 90, 0U);
+  HAL_NVIC_EnableIRQ(CAN2_RX1_IRQn);
 
   vCANRegister(&canHandlers, receive_queue);
 }

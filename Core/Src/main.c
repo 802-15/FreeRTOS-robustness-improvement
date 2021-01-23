@@ -103,7 +103,7 @@ static void test_malloc(void)
   user_free(allocated);
 }
 
-void blinkyFailureTest(void)
+void blinkyLocalFailureTest(void)
 {
   /* Dummy failure function that blinks the leds.
      This function will be executed by a single thread. */
@@ -127,6 +127,30 @@ void blinkyFailureTest(void)
     blinkTimes--;
   }
   SERIAL_PRINT("Done running failure handle!");
+}
+
+void blinkyRemoteFailureTest(void)
+{
+  const TickType_t xDelay = 50/portTICK_RATE_MS;
+  int blinkTimes = 40;
+
+  while(blinkTimes) {
+    gpio_led_state(LED3_ORANGE_ID, 1);
+    gpio_led_state(LED5_RED_ID, 1);
+    gpio_led_state(LED4_GREEN_ID, 1);
+    gpio_led_state(LED6_BLUE_ID, 1);
+
+    vTaskDelay(xDelay);
+
+    gpio_led_state(LED3_ORANGE_ID, 0);
+    gpio_led_state(LED5_RED_ID, 0);
+    gpio_led_state(LED4_GREEN_ID, 0);
+    gpio_led_state(LED6_BLUE_ID, 0);
+
+    vTaskDelay(xDelay);
+    blinkTimes--;
+  }
+  SERIAL_PRINT("Remote instance has failed!");
 }
 
 static void blinkTask(void *pvParameters)
@@ -177,6 +201,7 @@ static void blinkTask(void *pvParameters)
 int main(void)
 {
   int error = 0;
+  failureHandles_t failure_handles = {0};
 
   /* Start up the peripherals */
   HAL_Init();
@@ -194,7 +219,10 @@ int main(void)
   }
 
   /* Demonstration failure handle is registered */
-  vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
+  failure_handles.pvLocalFailureFunc = blinkyLocalFailureTest;
+  failure_handles.pvRemoteFailureFunc = blinkyRemoteFailureTest;
+  failure_handles.pvRemoteTimeoutFunc = blinkyRemoteFailureTest;
+  vTaskRegisterFailureCallback( blinkyHandle, &failure_handles );
 
   /* Set up CAN details for FreeRTOS in the application layer */
   CAN2_Register();
