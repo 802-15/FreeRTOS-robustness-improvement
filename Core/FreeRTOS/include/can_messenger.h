@@ -45,16 +45,16 @@
 
 
 /* CAN message length in bytes */
-#define CAN_MESSAGE_BYTES 7
+#define CAN_MESSAGE_BYTES              7
 
 /* 4 bytes in a single message are reserved for node ID or task result */
-#define CAN_ID_BYTES 4
+#define CAN_ID_BYTES                   4
 
 /* Suggested queue length, it might need to be adjusted to suit the application needs */
-#define CAN_QUEUE_LENGTH configCAN_QUEUE_LENGTH
+#define CAN_QUEUE_LENGTH               configCAN_QUEUE_LENGTH
 
 /* Number of nodes to be expected */
-#define CAN_MAXIMUM_NUMBER_OF_NODES configCAN_NODES
+#define CAN_MAXIMUM_NUMBER_OF_NODES    configCAN_NODES
 
 /* Receive errno is set inside the CAN receive interrupt if an error occured. */
 extern volatile BaseType_t xCANReceiveErrno;
@@ -62,25 +62,25 @@ extern volatile BaseType_t xCANReceiveErrno;
 /* CAN status */
 enum can_transciever_states
 {
-    CAN_STATUS_FAILED,              /*< CAN transciever has failed */
-    CAN_STATUS_OK,                  /*< CAN transciever was initialized */
+    CAN_STATUS_FAILED, /*< CAN transciever has failed */
+    CAN_STATUS_OK,     /*< CAN transciever was initialized */
 };
 
 /* CAN node role: primary or secondary */
 enum can_node_role
 {
-    CAN_NODE_PRIMARY,               /*< This node controls the task result arbitration procedure */
-    CAN_NODE_SECONDARY,             /*< This node receives the result of majority voting */
+    CAN_NODE_PRIMARY,   /*< This node controls the task result arbitration procedure */
+    CAN_NODE_SECONDARY, /*< This node receives the result of majority voting */
 };
 
 /* CAN message types: Correspond to various states of task instances */
 enum can_message_codes
 {
-    CAN_MESSAGE_FAIL,               /*< If fail was received, the has entered the failure handle / reset */
-    CAN_MESSAGE_STARTUP,            /*< Scheduler start sync message */
-    CAN_MESSAGE_STOP,               /*< Scheduler was stopped instance */
-    CAN_MESSAGE_SYNC,               /*< All local instances done synchronization */
-    CAN_MESSAGE_ARBITRATION,        /*< Sends out a task success/failure message */
+    CAN_MESSAGE_FAIL,        /*< If fail was received, the has entered the failure handle / reset */
+    CAN_MESSAGE_STARTUP,     /*< Scheduler start sync message */
+    CAN_MESSAGE_STOP,        /*< Scheduler was stopped instance */
+    CAN_MESSAGE_SYNC,        /*< All local instances done synchronization */
+    CAN_MESSAGE_ARBITRATION, /*< Sends out a task success/failure message */
 };
 
 /*
@@ -89,10 +89,10 @@ enum can_message_codes
  */
 typedef struct
 {
-    uint8_t uxMessageType;          /*< Contains info on the message type */
-    uint8_t uxTaskState;            /*< Local task instance state, defined in projdefs.h */
-    uint8_t uxCANNodeRole;          /*< Identifies the node role on the CAN bus */
-    uint32_t uxID;                  /*< Task result: a single unsigned integer representing the exeuction result OR Node ID: CAN node ID */
+    uint8_t uxMessageType; /*< Contains info on the message type */
+    uint8_t uxTaskState;   /*< Local task instance state, defined in projdefs.h */
+    uint8_t uxCANNodeRole; /*< Identifies the node role on the CAN bus */
+    uint32_t uxID;         /*< Task result: a single unsigned integer representing the exeuction result OR Node ID: CAN node ID */
 } CANSyncMessage_t;
 
 /*
@@ -108,12 +108,12 @@ typedef void ( * CANHandle_t ) ( void );
  */
 typedef struct
 {
-    UBaseType_t uxCANStatus;        /*< CAN transciver status */
-    UBaseType_t uxCANNodeRole;      /*< CAN role node: primary/secondary */
-    CANHandle_t pvCANInitFunc;      /*< Transciever initialization function pointer */
-    CANHandle_t pvCANDeInitFunc;    /*< Transciever stop function pointer */
-    CANSendHandle_t pvCANSendFunc;  /*< Send message function pointer */
-    uint32_t uxNodeID;              /*< 32 bit node identifier */
+    UBaseType_t uxCANStatus;       /*< CAN transciver status */
+    UBaseType_t uxCANNodeRole;     /*< CAN role node: primary/secondary */
+    CANHandle_t pvCANInitFunc;     /*< Transciever initialization function pointer */
+    CANHandle_t pvCANDeInitFunc;   /*< Transciever stop function pointer */
+    CANSendHandle_t pvCANSendFunc; /*< Send message function pointer */
+    uint32_t uxNodeID;             /*< 32 bit node identifier */
 } CANHandlers_t;
 
 /**
@@ -150,7 +150,7 @@ void vCANMessengerDeinit( void );
  * can_messenger.h
  * <pre>
  * void vCANRegister( CANHandlers_t * pxHandlers,
-                      QueueHandle_t xReceiveQueue );
+ *                    QueueHandle_t xReceiveQueue );
  * </pre>
  *
  * Register the CAN functionality by passing CAN related
@@ -245,7 +245,8 @@ UBaseType_t xCANElementSize( void );
  * @param pxMessage Pointer to synchronization message to be sent out
  *
  */
-void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMessage );
+void vCANSendReceive( barrierHandle_t * pxBarrierHandle,
+                      CANSyncMessage_t * pxMessage );
 
 /**
  * can_messenger.h
@@ -264,7 +265,8 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
  * to release the barrier immediately.
  *
  */
-void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle, BaseType_t xIsArbitrationMessage );
+void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle,
+                       BaseType_t xIsArbitrationMessage );
 
 /**
  * can_messenger.h

@@ -46,9 +46,9 @@ static SemaphoreHandle_t xCANNodesMutex = NULL;
 static UBaseType_t uxCANDetectedNodes = 0;
 
 #if ( configCAN_NODES == 1 )
-    static uint32_t prvNodeIDArray[1] = {0};
+    static uint32_t prvNodeIDArray[ 1 ] = { 0 };
 #else
-    static uint32_t prvNodeIDArray[CAN_MAXIMUM_NUMBER_OF_NODES - 1] = {0};
+    static uint32_t prvNodeIDArray[ CAN_MAXIMUM_NUMBER_OF_NODES - 1 ] = { 0 };
 #endif /* configCAN_NODES */
 
 
@@ -58,20 +58,21 @@ BaseType_t xCANMessengerInit( void )
     BaseType_t messages_received = pdFAIL;
 
     /* Check if queue is created */
-    if ( !xCANReceiveQueue || uxQueueMessagesWaiting( xCANReceiveQueue ) )
+    if( !xCANReceiveQueue || uxQueueMessagesWaiting( xCANReceiveQueue ) )
     {
         return error_code;
     }
 
     /* Check if the handlers were properly registered */
-    if ( !xCANHandlers.pvCANInitFunc || !xCANHandlers.pvCANDeInitFunc || !xCANHandlers.pvCANSendFunc )
+    if( !xCANHandlers.pvCANInitFunc || !xCANHandlers.pvCANDeInitFunc || !xCANHandlers.pvCANSendFunc )
     {
         return error_code;
     }
 
     /* CAN node globals protection mutex */
     xCANNodesMutex = xSemaphoreCreateMutex();
-    if ( !xCANNodesMutex )
+
+    if( !xCANNodesMutex )
     {
         return error_code;
     }
@@ -92,13 +93,14 @@ BaseType_t xCANMessengerInit( void )
     {
         /* Process messages to store info on other nodes */
         messages_received = xCANReceiveSyncMessages();
+
         if( messages_received == pdFALSE )
         {
             break;
         }
 
         /* Break from the loop when all the remote nodes are detected */
-        if( uxCANDetectedNodes == CAN_MAXIMUM_NUMBER_OF_NODES -1 )
+        if( uxCANDetectedNodes == CAN_MAXIMUM_NUMBER_OF_NODES - 1 )
         {
             break;
         }
@@ -121,7 +123,8 @@ void vCANMessengerDeinit( void )
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
 }
 
-void vCANRegister( CANHandlers_t * pxHandlers, QueueHandle_t xReceiveQueue )
+void vCANRegister( CANHandlers_t * pxHandlers,
+                   QueueHandle_t xReceiveQueue )
 {
     taskENTER_CRITICAL();
     /* Store pointers to queues */
@@ -151,10 +154,12 @@ BaseType_t xCANSendStartStopMessage( UBaseType_t uxMessageIsStartup )
      * when another startup message is received.
      */
     BaseType_t error_code = pdFAIL;
-    CANSyncMessage_t xMessage = {0};
+    CANSyncMessage_t xMessage = { 0 };
 
     if( xCANHandlers.uxCANStatus != CAN_STATUS_OK )
+    {
         return error_code;
+    }
 
     if( uxMessageIsStartup == pdPASS )
     {
@@ -196,79 +201,88 @@ BaseType_t xCANReceiveSyncMessages( void )
 
     while( uxQueueMessagesWaiting( xCANReceiveQueue ) )
     {
-
-        CANSyncMessage_t xMessage = {0};
+        CANSyncMessage_t xMessage = { 0 };
         BaseType_t i = 0;
 
         error_code = xQueueReceive( xCANReceiveQueue, &xMessage, 0 );
-        if ( error_code == pdFAIL )
+
+        if( error_code == pdFAIL )
         {
             return error_code;
         }
 
         /* Access message status */
-        switch ( xMessage.uxMessageType )
+        switch( xMessage.uxMessageType )
         {
             case CAN_MESSAGE_STARTUP:
-                if ( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
+
+                if( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
                 {
-                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
+                    for( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        if ( xMessage.uxID == prvNodeIDArray[i])
+                        if( xMessage.uxID == prvNodeIDArray[ i ] )
                         {
                             break;
                         }
-                        if ( prvNodeIDArray[i] == 0 && xMessage.uxID != xCANHandlers.uxNodeID )
+
+                        if( ( prvNodeIDArray[ i ] == 0 ) && ( xMessage.uxID != xCANHandlers.uxNodeID ) )
                         {
                             /* A new node has appeared, copy the ID */
-                            prvNodeIDArray[i] = xMessage.uxID;
+                            prvNodeIDArray[ i ] = xMessage.uxID;
                             uxCANDetectedNodes++;
                             /* Always respond with a start message of your own */
                             xCANSendStartStopMessage( pdTRUE );
                             break;
                         }
                     }
+
                     xSemaphoreGive( xCANNodesMutex );
                     break;
                 }
 
             case CAN_MESSAGE_STOP:
-                if ( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
+
+                if( xSemaphoreTake( xCANNodesMutex, portMAX_DELAY ) )
                 {
-                    for ( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
+                    for( i = 0; i < CAN_MAXIMUM_NUMBER_OF_NODES - 1; i++ )
                     {
-                        if ( xMessage.uxID == prvNodeIDArray[i] )
+                        if( xMessage.uxID == prvNodeIDArray[ i ] )
                         {
                             /* Remove the node from internal list */
-                            prvNodeIDArray[i] = 0;
+                            prvNodeIDArray[ i ] = 0;
                             uxCANDetectedNodes--;
                             xSemaphoreGive( xCANNodesMutex );
                             break;
                         }
                     }
+
                     /* Ignore this message since the node is not present */
                     xSemaphoreGive( xCANNodesMutex );
                     break;
                 }
 
             case CAN_MESSAGE_SYNC:
+
                 /* A task finished executing - store the result or ignore
                  * the message if this is  a secondary node.
                  */
-                if ( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
+                if( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
                 {
                     vTaskRemoteData( xMessage.uxTaskState, xMessage.uxID, CAN_MESSAGE_SYNC );
                 }
+
                 break;
 
             case CAN_MESSAGE_ARBITRATION:
+
                 /* An arbitration message with the correct result was
                  * received. Task behaviour will be modified in tasks.c
                  */
-                if ( xCANHandlers.uxCANNodeRole == CAN_NODE_SECONDARY )
+                if( xCANHandlers.uxCANNodeRole == CAN_NODE_SECONDARY )
                 {
                     vTaskRemoteData( xMessage.uxTaskState, xMessage.uxID, CAN_MESSAGE_ARBITRATION );
                 }
+
                 break;
 
             default:
@@ -281,16 +295,19 @@ BaseType_t xCANReceiveSyncMessages( void )
     return error_code;
 }
 
-void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMessage )
+void vCANSendReceive( barrierHandle_t * pxBarrierHandle,
+                      CANSyncMessage_t * pxMessage )
 {
     BaseType_t message_sent = pdFAIL;
     BaseType_t messages_received = pdFAIL;
 
-    if ( pxMessage )
+    if( pxMessage )
+    {
         message_sent = xCANSendSyncMessage( pxMessage );
+    }
 
     /* Set up remote counter to current value of nodes */
-    if ( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
+    if( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
     {
         pxBarrierHandle->uxRemoteCounter = uxCANDetectedNodes;
         xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
@@ -300,26 +317,28 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle, CANSyncMessage_t * pxMe
     {
         /* Receive messages continously */
         messages_received = xCANReceiveSyncMessages();
-        if ( messages_received == pdFAIL )
+
+        if( messages_received == pdFAIL )
         {
             break;
         }
 
         /* Re-send local status */
-        if( message_sent == pdFAIL && pxMessage )
+        if( ( message_sent == pdFAIL ) && pxMessage )
         {
             message_sent = xCANSendSyncMessage( pxMessage );
         }
 
         /* Break from the loop if the barrier is released */
-        if ( !pxBarrierHandle->uxRemoteCounter )
+        if( !pxBarrierHandle->uxRemoteCounter )
         {
             break;
         }
     }
 }
 
-void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle, BaseType_t xIsArbitrationMessage )
+void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle,
+                       BaseType_t xIsArbitrationMessage )
 {
     if( xSemaphoreTake( pxBarrierHandle->xRemoteCounterMutex, portMAX_DELAY ) )
     {
@@ -332,13 +351,14 @@ void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle, BaseType_t xIsArbitrat
         {
             pxBarrierHandle->uxRemoteCounter--;
         }
+
         xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
     }
 }
 
 BaseType_t xCANPrimaryNode( void )
 {
-    if ( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
+    if( xCANHandlers.uxCANNodeRole == CAN_NODE_PRIMARY )
     {
         return pdTRUE;
     }

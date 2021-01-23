@@ -267,7 +267,6 @@ static void prvInitialiseNewStreamBuffer( StreamBuffer_t * const pxStreamBuffer,
         {
             pucAllocatedMemory = NULL;
         }
-        
 
         if( pucAllocatedMemory != NULL )
         {
