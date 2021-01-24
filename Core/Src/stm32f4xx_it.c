@@ -141,11 +141,6 @@ void UsageFault_Handler(void)
 
 #if 0
 /**
-  * Override CubeMX HAL interrupt handlers using CMSIS interrupt handler names.
-  * The new handlers will be set to FreeRTOS port level interrupt handlers.
-  */
-
-/**
   * @brief This function handles System service call via SWI instruction.
   */
 void SVC_Handler(void)
@@ -173,11 +168,6 @@ void DebugMon_Handler(void)
 }
 
 #if 0
-/**
-  * Override CubeMX HAL interrupt handlers using CMSIS interrupt handler names.
-  * The new handlers will be set to FreeRTOS port level interrupt handlers.
-  */
-
 /**
   * @brief This function handles Pendable request for system service.
   */
