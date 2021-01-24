@@ -114,9 +114,6 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     GPIO_InitStruct.Alternate = GPIO_AF9_CAN2;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /* Correct interrupts must be set up to be between
-   * configKERNEL_INTERRUPT_PRIORITY and
-   * configMAX_SYSCALL_INTERRUPT_PRIOTIY*/
   /* USER CODE END CAN2_MspInit 1 */
   }
 }
@@ -151,29 +148,12 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 /* USER CODE BEGIN 1 */
 
 /**
-  * @brief Performs all the steps required to start CAN2 peripheral.
-  * The priority of receive interrupt must be logically lowered, so it
-  * can use "FromISR" routines of FreeRTOS.
+  * @brief Activate the CAN receive interrupt and start listening on the
+  * CAN bus. This function is called from FreeRTOS, during the scheduler
+  * start. Actual hardware initialization must be done prior.
   */
 void CAN2_Init(void)
 {
-  CAN_FilterTypeDef can_filter;
-
-  /* Set up CAN2 transciever and interrupts */
-  MX_CAN2_Init();
-
-  /* Set up filters for fif0 */
-  can_filter.FilterActivation = ENABLE;
-  can_filter.FilterMode = CAN_FILTERMODE_IDMASK;
-  can_filter.FilterScale = CAN_FILTERSCALE_32BIT;
-  can_filter.FilterIdHigh = 0x0000;
-  can_filter.FilterIdLow = 0x0000;
-  can_filter.FilterMaskIdHigh = 0x0000;
-  can_filter.FilterMaskIdLow = 0x0000;
-  can_filter.FilterBank = 0;
-  can_filter.FilterFIFOAssignment = CAN_RX_FIFO0;
-  HAL_CAN_ConfigFilter(&hcan2, &can_filter);
-
   /* Set up notifications for the interrupt mode: message pending in FIF0 */
   HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 
@@ -289,12 +269,29 @@ void CAN2_DeInit(void)
   * @brief Create message queues and pass their pointers to FreeRTOS, along
   * with pointers to CAN related functions. The ID parameter is used to
   * signify priority in each message, and it should be different between
-  * boards.
+  * boards. CAN2 peripheral and interrupts setup is also done here,
+  * before starting the scheduler.
   */
 void CAN2_Register(void)
 {
   size_t element_size;
   CANHandlers_t canHandlers;
+  CAN_FilterTypeDef can_filter;
+
+  /* Set up CAN2 transciever and interrupts */
+  MX_CAN2_Init();
+
+  /* Set up filters for fif0 */
+  can_filter.FilterActivation = ENABLE;
+  can_filter.FilterMode = CAN_FILTERMODE_IDMASK;
+  can_filter.FilterScale = CAN_FILTERSCALE_32BIT;
+  can_filter.FilterIdHigh = 0x0000;
+  can_filter.FilterIdLow = 0x0000;
+  can_filter.FilterMaskIdHigh = 0x0000;
+  can_filter.FilterMaskIdLow = 0x0000;
+  can_filter.FilterBank = 0;
+  can_filter.FilterFIFOAssignment = CAN_RX_FIFO0;
+  HAL_CAN_ConfigFilter(&hcan2, &can_filter);
 
   /* This might not be ideal if you have boards of the same revision */
   can_node_id = HAL_GetREVID();
@@ -337,6 +334,11 @@ void CAN2_Register(void)
 
   /* Disable subpriority bits using this HAL->CMSIS call */
   HAL_NVIC_SetPriorityGrouping(0);
+
+  /* Correct interrupts must be set up to be between
+   * configKERNEL_INTERRUPT_PRIORITY and
+   * configMAX_SYSCALL_INTERRUPT_PRIOTIY
+   */
 
   /* Set priority to logically lower than MAX_SYSCALL_INTERRUPT_PRIORITY */
   HAL_NVIC_SetPriority(CAN2_RX0_IRQn, 90, 0U);
