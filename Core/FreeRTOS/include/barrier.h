@@ -44,23 +44,23 @@
 
 typedef struct functionContainer
 {
-    TaskFailureFunction_t pvFailureFunc;    /*< Callback function container required for passing function pointers using timer ID API */
-    TaskHandle_t * xTaskToReset;            /*< Task handle is used to reset the task from the timer callback */
+    TaskFailureFunction_t pvFailureFunc; /*< Callback function container required for passing function pointers using timer ID API */
+    TaskHandle_t * xTaskToReset;         /*< Task handle is used to reset the task from the timer callback */
 } callbackContainer_t;
 
 typedef struct barrierHandle
 {
-    UBaseType_t uxArriveCounter;            /*< Count of threads that have entered the barrier */
-    UBaseType_t uxLeaveCounter;             /*< Total count of threads that can enter this barrier */
-    UBaseType_t uxFlag;                     /*< Barrier active flag (used to check barrier status) */
-    UBaseType_t uxTimerFlag;                /*< Barrier timer flag, set once the timer has been started */
+    UBaseType_t uxArriveCounter;          /*< Count of threads that have entered the barrier */
+    UBaseType_t uxLeaveCounter;           /*< Total count of threads that can enter this barrier */
+    UBaseType_t uxFlag;                   /*< Barrier active flag (used to check barrier status) */
+    UBaseType_t uxTimerFlag;              /*< Barrier timer flag, set once the timer has been started */
 
-    SemaphoreHandle_t xCounterMutex;        /*< Barrier counter protection mutex */
-    SemaphoreHandle_t xBarrierSemaphore;    /*< Barrier waiting semaphore mutex */
+    SemaphoreHandle_t xCounterMutex;      /*< Barrier counter protection mutex */
+    SemaphoreHandle_t xBarrierSemaphore;  /*< Barrier waiting semaphore mutex */
 
-    TimerHandle_t xBarrierTimer;            /*< Barrier can time out if the instances take too long to complete */
+    TimerHandle_t xBarrierTimer;          /*< Barrier can time out if the instances take too long to complete */
 
-    callbackContainer_t pxCallbackStruct;   /*< Stores pointer to callback function */
+    callbackContainer_t pxCallbackStruct; /*< Stores pointer to callback function */
 } barrierHandle_t;
 
 /**
@@ -91,7 +91,10 @@ typedef struct barrierHandle
  * redundant task TCB, otherwise an error code defined in the file projdefs.h
  *
  */
-BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle, TaskFailureFunction_t pvFailureFunc, TickType_t xTimeoutTicks , TaskHandle_t * pxCreatedTask );
+BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle,
+                           TaskFailureFunction_t pvFailureFunc,
+                           TickType_t xTimeoutTicks,
+                           TaskHandle_t * pxCreatedTask );
 
 /**
  * barrier.h
@@ -143,7 +146,7 @@ void vBarrierSignal( barrierHandle_t * pxBarrierHandle );
  * @return pdTRUE is returned if the barrier is active, pdFALSE otherwise
  *
  */
-BaseType_t xBarrierGetState ( barrierHandle_t * pxBarrierHandle );
+BaseType_t xBarrierGetState( barrierHandle_t * pxBarrierHandle );
 
 /**
  * barrier.h

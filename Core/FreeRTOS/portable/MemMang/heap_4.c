@@ -138,8 +138,8 @@ void * pvPortMalloc( size_t xWantedSize )
         {
             /* The wanted size must be increased so it can contain a BlockLink_t
              * structure in addition to the requested amount of bytes. */
-            if( ( xWantedSize > 0 ) && 
-                ( ( xWantedSize + xHeapStructSize ) >  xWantedSize ) ) /* Overflow check */
+            if( ( xWantedSize > 0 ) &&
+                ( ( xWantedSize + xHeapStructSize ) > xWantedSize ) ) /* Overflow check */
             {
                 xWantedSize += xHeapStructSize;
 
@@ -147,8 +147,8 @@ void * pvPortMalloc( size_t xWantedSize )
                 if( ( xWantedSize & portBYTE_ALIGNMENT_MASK ) != 0x00 )
                 {
                     /* Byte alignment required. Check for overflow. */
-                    if( ( xWantedSize + ( portBYTE_ALIGNMENT - ( xWantedSize & portBYTE_ALIGNMENT_MASK ) ) ) 
-                            > xWantedSize )
+                    if( ( xWantedSize + ( portBYTE_ALIGNMENT - ( xWantedSize & portBYTE_ALIGNMENT_MASK ) ) )
+                        > xWantedSize )
                     {
                         xWantedSize += ( portBYTE_ALIGNMENT - ( xWantedSize & portBYTE_ALIGNMENT_MASK ) );
                         configASSERT( ( xWantedSize & portBYTE_ALIGNMENT_MASK ) == 0 );
@@ -156,14 +156,14 @@ void * pvPortMalloc( size_t xWantedSize )
                     else
                     {
                         xWantedSize = 0;
-                    }  
+                    }
                 }
                 else
                 {
                     mtCOVERAGE_TEST_MARKER();
                 }
-            } 
-            else 
+            }
+            else
             {
                 xWantedSize = 0;
             }
@@ -510,7 +510,10 @@ void vPortGetHeapStats( HeapStats_t * pxHeapStats )
          * user to connect with the debugger.
          */
         portDISABLE_INTERRUPTS();
-        for( ;; );
+
+        for( ; ; )
+        {
+        }
     }
 
-#endif
+#endif /* if ( ( configUSE_TEMPORAL_REDUNDANCY == 1 ) && ( configUSE_MALLOC_FAILED_HOOK == 1 ) ) */
