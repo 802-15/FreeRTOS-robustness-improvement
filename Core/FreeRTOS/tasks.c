@@ -392,15 +392,10 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tas
 
 #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
 
-    static TCB_t * pxCANTask = NULL;          /* Pointer to a single CAN task */
-    static BaseType_t xReceivedResults = 0;   /* Number of received task results */
-    static BaseType_t xArbitrationResult = 0; /* Result received from the remote threads */
-
-    #if ( configCAN_NODES == 1 )
-        static uint32_t uxTaskResults[ 1 ];                           /* Dummy array */
-    #else
-        static uint32_t uxTaskResults[ configCAN_NODES - 1 ] = { 0 }; /* Store remote CAN task results here */
-    #endif /* configCAN_NODES */
+    static TCB_t * pxCANTask = NULL;                              /* Pointer to a single CAN task */
+    static BaseType_t xReceivedResults = 0;                       /* Number of received task results */
+    static BaseType_t xArbitrationResult = 0;                     /* Result received from the remote threads */
+    static uint32_t uxTaskResults[ configCAN_NODES - 1 ] = { 0 }; /* Store remote CAN task results here */
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */
 
@@ -1524,6 +1519,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
         pxTCB = prvGetTCBFromHandle( TaskHandle );
 
+        /* Set up CAN timeout callback */
+        #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+            vCANTimerCallbackSetup( pxFailureHandles->pvRemoteTimeoutFunc );
+        #endif
+
         /* Copy the failure structure in the argument */
         pxTCB->pxRedundantTask->xFailureHandles = *pxFailureHandles;
 
@@ -1974,6 +1974,18 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         }
 
         return -1;
+    }
+
+    void vTaskCANDisable( void )
+    {
+        /* Disable CAN sync for the single redundnat task
+         * shared over CAN.
+         */
+        if( pxCANTask )
+        {
+            pxCANTask->pxRedundantTask->uxTaskCANSync = 0;
+            pxCANTask = NULL;
+        }
     }
 
 #endif /* configUSE_SPATIAL_REDUNDANCY */

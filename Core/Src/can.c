@@ -322,6 +322,13 @@ void CAN2_Register(void)
   canHandlers.pvCANDeInitFunc = CAN2_DeInit;
   canHandlers.pvCANSendFunc = CAN2_Send;
 
+  /* Set up 500 millisecond timeout for CAN messages.
+   * This timeout should account for other nodes possibly
+   * executing the local and remote timeout functions before
+   * sending their messages.
+   */
+  canHandlers.xCANTimeout = 750/portTICK_RATE_MS;
+
   /*
    * NVIC subpriority bits must be disabled before calling
    * vTaskStart scheduler, so they are placed in the CAN register

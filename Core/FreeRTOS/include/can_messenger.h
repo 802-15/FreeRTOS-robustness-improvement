@@ -36,6 +36,7 @@
 #include "queue.h"
 #include "task.h"
 #include "barrier.h"
+#include "timers.h"
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus
@@ -76,11 +77,12 @@ enum can_node_role
 /* CAN message types: Correspond to various states of task instances */
 enum can_message_codes
 {
-    CAN_MESSAGE_FAIL,        /*< If fail was received, the has entered the failure handle / reset */
+    CAN_MESSAGE_FAIL,        /*< This is never explicitly sent, the message failed if it is zeroed out */
     CAN_MESSAGE_STARTUP,     /*< Scheduler start sync message */
     CAN_MESSAGE_STOP,        /*< Scheduler was stopped instance */
     CAN_MESSAGE_SYNC,        /*< All local instances done synchronization */
     CAN_MESSAGE_ARBITRATION, /*< Sends out a task success/failure message */
+    CAN_MESSAGE_TIMEOUT,     /*< Sent when one nodes times out, stops the CAN network */
 };
 
 /*
@@ -108,12 +110,14 @@ typedef void ( * CANHandle_t ) ( void );
  */
 typedef struct
 {
-    UBaseType_t uxCANStatus;       /*< CAN transciver status */
-    UBaseType_t uxCANNodeRole;     /*< CAN role node: primary/secondary */
-    CANHandle_t pvCANInitFunc;     /*< Transciever initialization function pointer */
-    CANHandle_t pvCANDeInitFunc;   /*< Transciever stop function pointer */
-    CANSendHandle_t pvCANSendFunc; /*< Send message function pointer */
-    uint32_t uxNodeID;             /*< 32 bit node identifier */
+    UBaseType_t uxCANStatus;                   /*< CAN transciver status */
+    UBaseType_t uxCANNodeRole;                 /*< CAN role node: primary/secondary */
+    CANHandle_t pvCANInitFunc;                 /*< Transciever initialization function pointer */
+    CANHandle_t pvCANDeInitFunc;               /*< Transciever stop function pointer */
+    CANSendHandle_t pvCANSendFunc;             /*< Send message function pointer */
+    uint32_t uxNodeID;                         /*< 32 bit node identifier */
+    TickType_t xCANTimeout;                    /*< CAN timeout period, timer failure callback is triggered */
+    TaskFailureFunction_t xCANTimeoutCallback; /*< CAN timeout callback */
 } CANHandlers_t;
 
 /**
@@ -280,5 +284,19 @@ void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle,
  *
  */
 BaseType_t xCANPrimaryNode( void );
+
+/**
+ * can_messenger.h
+ * <pre>
+ * void vCANTimerCallbackSetup( TaskFailureFunction_t pvTimeoutFunc );
+ * </pre>
+ *
+ * Pass a function pointer to the CAN timer. This function should be
+ * defined in the application layer by the FreeRTOS user.
+ *
+ * @pvTimeoutFunc CAN timeout failure callback
+ *
+ */
+void vCANTimerCallbackSetup( TaskFailureFunction_t pvTimeoutFunc );
 
 #endif /* __CAN_MESSENGER_H_ */

@@ -581,6 +581,18 @@ typedef struct
 */
     void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType );
 
+/**
+* task.h
+* <pre>
+* void vTaskCANDisable( void );
+* </pre>
+*
+* Calling this function will prevent the kernel from synchronizing the
+* redundant task previously registered as the "CAN task".
+*
+*/
+    void vTaskCANDisable( void );
+
 #endif /* configUSE_SPATIAL_REDUNDANCY */
 
 /**

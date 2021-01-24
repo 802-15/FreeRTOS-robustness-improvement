@@ -33,23 +33,22 @@
 
 
 /* Receive errno is set inside the CAN receive interrupt if an error occured. */
-volatile BaseType_t xCANReceiveErrno;
+volatile BaseType_t xCANReceiveErrno = 0;
 
 /* Global CAN receive queue pointer, must be prepared in the application layer */
-static QueueHandle_t xCANReceiveQueue;
+static QueueHandle_t xCANReceiveQueue = NULL;
 
 /* CAN handlers for this platform are stored in this global structure */
-static CANHandlers_t xCANHandlers;
+static CANHandlers_t xCANHandlers = { 0 };
 
 /* Keep track of the nodes detected on the CAN bus */
 static SemaphoreHandle_t xCANNodesMutex = NULL;
 static UBaseType_t uxCANDetectedNodes = 0;
+static uint32_t prvNodeIDArray[ CAN_MAXIMUM_NUMBER_OF_NODES - 1 ] = { 0 };
 
-#if ( configCAN_NODES == 1 )
-    static uint32_t prvNodeIDArray[ 1 ] = { 0 };
-#else
-    static uint32_t prvNodeIDArray[ CAN_MAXIMUM_NUMBER_OF_NODES - 1 ] = { 0 };
-#endif /* configCAN_NODES */
+/* CAN timer is used to prevent the kernel from hanging while waiting for CAN messages */
+static TimerHandle_t xCANTimer = NULL;
+static void prvCANTimeoutCallback( TimerHandle_t xTimer );
 
 
 BaseType_t xCANMessengerInit( void )
@@ -65,6 +64,15 @@ BaseType_t xCANMessengerInit( void )
 
     /* Check if the handlers were properly registered */
     if( !xCANHandlers.pvCANInitFunc || !xCANHandlers.pvCANDeInitFunc || !xCANHandlers.pvCANSendFunc )
+    {
+        return error_code;
+    }
+
+    configASSERT( xCANHandlers.xCANTimeout > 0 );
+
+    xCANTimer = xTimerCreate( "CAN Timer", xCANHandlers.xCANTimeout, pdFALSE, NULL, prvCANTimeoutCallback );
+
+    if( !xCANTimer )
     {
         return error_code;
     }
@@ -119,6 +127,7 @@ void vCANMessengerDeinit( void )
     xCANHandlers.pvCANDeInitFunc();
 
     xQueueReset( xCANReceiveQueue );
+    xTimerDelete( xCANTimer, 0 );
 
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
 }
@@ -133,13 +142,13 @@ void vCANRegister( CANHandlers_t * pxHandlers,
     /* Assign handles to the global CAN handles structre */
     xCANHandlers.uxCANStatus = CAN_STATUS_FAILED;
     xCANHandlers.uxCANNodeRole = pxHandlers->uxCANNodeRole;
+    xCANHandlers.uxNodeID = pxHandlers->uxNodeID;
+    xCANHandlers.xCANTimeout = pxHandlers->xCANTimeout;
 
     xCANHandlers.pvCANInitFunc = pxHandlers->pvCANInitFunc;
     xCANHandlers.pvCANDeInitFunc = pxHandlers->pvCANDeInitFunc;
     xCANHandlers.pvCANSendFunc = pxHandlers->pvCANSendFunc;
 
-    /* Store node ID */
-    xCANHandlers.uxNodeID = pxHandlers->uxNodeID;
     taskEXIT_CRITICAL();
 }
 
@@ -285,6 +294,11 @@ BaseType_t xCANReceiveSyncMessages( void )
 
                 break;
 
+            case CAN_MESSAGE_TIMEOUT:
+                /* This node will no longer try to sync its CAN task */
+                vTaskCANDisable();
+                break;
+
             default:
                 /* Something went wrong */
                 error_code = pdFAIL;
@@ -313,6 +327,16 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle,
         xSemaphoreGive( pxBarrierHandle->xRemoteCounterMutex );
     }
 
+    /* Start the CAN timer before processing the message queue.
+     * The timer is meant to prevent this loop from hanging while
+     * waiting for synchronization or arbitration messages. CAN
+     * timeout should be tight since every node executes
+     * same/similar pieces of code, and the final timeout is
+     * offset only by message transmission lengths and
+     * cycles spent on arbitration.
+     */
+    xTimerStart( xCANTimer, 0 );
+
     for( ; ; )
     {
         /* Receive messages continously */
@@ -330,11 +354,13 @@ void vCANSendReceive( barrierHandle_t * pxBarrierHandle,
         }
 
         /* Break from the loop if the barrier is released */
-        if( !pxBarrierHandle->uxRemoteCounter )
+        if( !pxBarrierHandle->uxRemoteCounter || ( uxCANDetectedNodes == 0 ) )
         {
             break;
         }
     }
+
+    xTimerStop( xCANTimer, 0 );
 }
 
 void vCANRemoteSignal( barrierHandle_t * pxBarrierHandle,
@@ -366,4 +392,41 @@ BaseType_t xCANPrimaryNode( void )
     {
         return pdFALSE;
     }
+}
+
+static void prvCANTimeoutCallback( TimerHandle_t xTimer )
+{
+    ( void ) xTimer;
+    CANSyncMessage_t xMessage = { 0 };
+
+    taskENTER_CRITICAL();
+
+    /* Unblock the thread stuck in vCANSendReceive */
+    uxCANDetectedNodes = 0;
+
+    /* This node will no longer try to sync its CAN task */
+    vTaskCANDisable();
+
+    /* Send out the timeout message */
+    xMessage.uxMessageType = CAN_MESSAGE_TIMEOUT;
+    xMessage.uxID = xCANHandlers.uxNodeID;
+    xCANSendSyncMessage( &xMessage );
+
+    /*Run the user specified callback after getting the function pointer */
+    taskEXIT_CRITICAL();
+
+    if( xCANHandlers.xCANTimeoutCallback )
+    {
+        xCANHandlers.xCANTimeoutCallback();
+    }
+}
+
+void vCANTimerCallbackSetup( TaskFailureFunction_t pvTimeoutFunc )
+{
+    if( !pvTimeoutFunc )
+    {
+        return;
+    }
+
+    xCANHandlers.xCANTimeoutCallback = pvTimeoutFunc;
 }

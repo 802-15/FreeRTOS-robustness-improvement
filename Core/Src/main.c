@@ -105,10 +105,9 @@ static void test_malloc(void)
 
 void blinkyLocalFailureTest(void)
 {
-  /* Dummy failure function that blinks the leds.
-     This function will be executed by a single thread. */
-  const TickType_t xDelay = 200/portTICK_RATE_MS;
-  int blinkTimes = 10;
+  /* 600 millisecond local failure */
+  const TickType_t xDelay = 100/portTICK_RATE_MS;
+  int blinkTimes = 3;
 
   while(blinkTimes) {
     gpio_led_state(LED3_ORANGE_ID, 1);
@@ -131,8 +130,9 @@ void blinkyLocalFailureTest(void)
 
 void blinkyRemoteFailureTest(void)
 {
+  /* 1000 millisecond remote failure */
   const TickType_t xDelay = 50/portTICK_RATE_MS;
-  int blinkTimes = 40;
+  int blinkTimes = 10;
 
   while(blinkTimes) {
     gpio_led_state(LED3_ORANGE_ID, 1);

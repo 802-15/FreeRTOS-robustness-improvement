@@ -234,7 +234,9 @@ debug:
 #
 #######################################
 format:
-	uncrustify -c uncrustify.cfg --no-backup Core/FreeRTOS/*.c
+	uncrustify -c uncrustify.cfg --no-backup \
+	Core/FreeRTOS/*.c \
+	Core/FreeRTOS/include/*.h
 
 #######################################
 # clean up
