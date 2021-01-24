@@ -227,6 +227,15 @@ debug:
 	$(DBG) -x Core/Debug/script.gdb $(BUILD_DIR)/$(TARGET).elf
 
 #######################################
+# use uncrustify to format kernel code
+#
+#######################################
+format:
+	uncrustify -c uncrustify.cfg --no-backup \
+	Core/FreeRTOS/*.c \
+	Core/FreeRTOS/include/*.h
+
+#######################################
 # clean up
 #######################################
 clean:
