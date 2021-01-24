@@ -71,6 +71,12 @@ typedef struct kalman_state_storage {
     vector_t y_cov[TASK_INSTANCES];
 } kalman_state_t;
 
+/* Kalman filter measurement struct; for use with a queue */
+typedef struct measurement {
+    double x_value;
+    double y_value;
+} measurement_t;
+
 /* Start up the application */
 void application_init(void);
 

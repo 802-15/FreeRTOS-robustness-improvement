@@ -57,157 +57,12 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-<<<<<<< HEAD
-static void test_malloc(void)
-{
-  char * allocated = NULL;
-
-  /*
-   * Call this function before and after the scheduler was
-   * started to make sure the memory allocation scheme is working.
-   */
-
-  allocated = user_malloc(sizeof(char));
-  memset(allocated, 0, sizeof(char));
-
-  #if ( USE_MALLOC == 1 )
-    /* Test out linker heap */
-    if ( &bss_variable >= (int *) allocated) {
-      SERIAL_PRINT("Linker heap failed!");
-      while(1);
-    } else {
-      SERIAL_PRINT("Linker heap working!");
-    }
-  #else
-    /* Test the FreeRTOS heap in the application layer */
-    if (&bss_variable >= (int *) allocated) {
-      SERIAL_PRINT("FreeRTOS heap failed!");
-      while(1);
-    } else {
-      SERIAL_PRINT("FreeRTOS heap working!");
-    }
-  #endif
-  user_free(allocated);
-}
-
-void vTimerCallback(TimerHandle_t xTimer)
- {
-  xTimerStop(xTimer, 0);
-
-  /* Resume the blinky task from timer callback */
-
-  SERIAL_PRINT("Unblocking task!");
-  vTaskResume(blinkyHandle);
- }
-
-void blinkyResultFailure(void)
-{
-  /* This function runs when the redundant task results differ */
-  const TickType_t xDelay = 200/portTICK_RATE_MS;
-  int blinkTimes = 10;
-
-  while(blinkTimes) {
-    gpio_led_state(LED3_ORANGE_ID, 1);
-    gpio_led_state(LED5_RED_ID, 1);
-    gpio_led_state(LED4_GREEN_ID, 1);
-    gpio_led_state(LED6_BLUE_ID, 1);
-
-    vTaskDelay(xDelay);
-
-    gpio_led_state(LED3_ORANGE_ID, 0);
-    gpio_led_state(LED5_RED_ID, 0);
-    gpio_led_state(LED4_GREEN_ID, 0);
-    gpio_led_state(LED6_BLUE_ID, 0);
-
-    vTaskDelay(xDelay);
-    blinkTimes--;
-  }
-  SERIAL_PRINT("Done running failure handle!");
-}
-
-void blinkyTimeoutFailure(void)
-{
-  /* This function runs when the redundant task times out */
-  const TickType_t xDelay = 20/portTICK_RATE_MS;
-  int blinkTimes = 40;
-
-  while(blinkTimes) {
-    gpio_led_state(LED3_ORANGE_ID, 1);
-    gpio_led_state(LED5_RED_ID, 1);
-    gpio_led_state(LED4_GREEN_ID, 1);
-    gpio_led_state(LED6_BLUE_ID, 1);
-
-    vTaskDelay(xDelay);
-
-    gpio_led_state(LED3_ORANGE_ID, 0);
-    gpio_led_state(LED5_RED_ID, 0);
-    gpio_led_state(LED4_GREEN_ID, 0);
-    gpio_led_state(LED6_BLUE_ID, 0);
-
-    vTaskDelay(xDelay);
-    blinkTimes--;
-  }
-  SERIAL_PRINT("Done running failure handle!");
-}
-
-static void blinkTask(void *pvParameters)
-{
-  /* Time redundant blink task used to demonstrate the basic behaviour of
-   * a time redundant task running with two instances. Each instance will blink
-   * its own LEDs.
-   */
-  (void) pvParameters;
-  const TickType_t xDelay = 1000/portTICK_RATE_MS;
-
-  test_malloc();
-
-  /* Get the running instance number and store it on the instance stack */
-  BaseType_t instanceNumber = xTaskGetInstanceNumber();
-
-  while (1) {
-
-    if ( instanceNumber % 2 == 0 ) {
-      gpio_led_state(LED3_ORANGE_ID, 1);
-      gpio_led_state(LED5_RED_ID, 0);
-     } else {
-      gpio_led_state(LED4_GREEN_ID, 1);
-      gpio_led_state(LED6_BLUE_ID, 0);
-    }
-
-    vTaskDelay(xDelay);
-
-    if ( instanceNumber % 2 == 0 ) {
-      gpio_led_state(LED3_ORANGE_ID, 0);
-      gpio_led_state(LED5_RED_ID, 1);
-    } else {
-      gpio_led_state(LED4_GREEN_ID, 0);
-      gpio_led_state(LED6_BLUE_ID, 1);
-    }
-
-    vTaskDelay(xDelay);
-
-    SERIAL_PRINT("Instance %d done", instanceNumber);
-    xTaskInstanceDone( instanceNumber );
-
-    xTimerReset(blinkyTimerHandle, 0);
-    vTaskCallAPISynchronized( blinkyHandle, vTaskSuspend );
-  }
-}
-
-=======
->>>>>>> 3fc3613 (add Kalman filter demo application)
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
-<<<<<<< HEAD
-  int error = 0;
-  TaskFailureHandles_t xFailureHandles = {0};
-
-=======
->>>>>>> 3fc3613 (add Kalman filter demo application)
   /* Start up the peripherals */
   HAL_Init();
   SystemClock_Config();
@@ -215,28 +70,8 @@ int main(void)
   HAL_UART_MspInit(&huart1);
   MX_USART1_UART_Init();
 
-<<<<<<< HEAD
-  SERIAL_PRINT(INIT_MSG);
-
-  /* Create a simple blinky demonstration task */
-  error = xTaskCreate(blinkTask, (const char *) "Blinky", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-2, &blinkyHandle, pdMS_TO_TICKS(5000));
-  if (error <= 0) {
-    while(1);
-  }
-
-  /* Demonstration failure handle is registered */
-  xFailureHandles.pvResultFailure = blinkyResultFailure;
-  xFailureHandles.pvTimeoutFailure = blinkyTimeoutFailure;
-  vTaskRegisterFailureCallback( blinkyHandle, &xFailureHandles );
-
-  /* Task unblock timer */
-  blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
-
-  vTaskStartScheduler();
-=======
   /* Start up the demo application */
   application_init();
->>>>>>> 3fc3613 (add Kalman filter demo application)
 }
 
 /* USER CODE END 0 */
