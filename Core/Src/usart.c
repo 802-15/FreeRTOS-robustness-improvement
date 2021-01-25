@@ -23,6 +23,7 @@
 /* USER CODE BEGIN 0 */
 
 int USART1TransferCompleted = 1;
+char usart_message_buffer[256];
 
 /* USER CODE END 0 */
 

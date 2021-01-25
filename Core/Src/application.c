@@ -32,17 +32,12 @@
 #include "application.h"
 
 
-char messageBuffer[256];
-
-/* Formatting macro */
-#define SERIAL_PRINT(FORMAT,...) \
-    lightFormat(messageBuffer, FORMAT "\r\n", ##__VA_ARGS__ ); \
-    USART1_SendString(messageBuffer);
-
 /* FreeRTOS handles */
 static TaskHandle_t filter_task = NULL;
+static TaskHandle_t print_task = NULL;
 static TimerHandle_t measurement_timer = NULL;
 static QueueHandle_t measurement_queue = NULL;
+static QueueHandle_t results_queue = NULL;
 
 /* Measurement data */
 static BaseType_t measurement_count = 1;
@@ -52,10 +47,10 @@ kalman_handle_t filter_storage = {0};
 kalman_state_t * kalman_state = NULL;
 
 /* Default filter values */
-vector_t default_x_state;
-vector_t default_y_state;
-vector_t default_x_cov;
-vector_t default_y_cov;
+vector_t default_x_state = {0};
+vector_t default_y_state = {0};
+vector_t default_x_cov = {0};
+vector_t default_y_cov = {0};
 
 static void displacement_data_update(TimerHandle_t xTimer)
 {
@@ -67,43 +62,49 @@ static void displacement_data_update(TimerHandle_t xTimer)
      */
     (void) xTimer;
     measurement_t measurement_struct = {0};
-    int error_code = pdFALSE;
 
-    /* Obtain a new measurement */
+    TASK_4_START
+
+    /* Display the results if final measurement was reached */
     if (measurement_count >= MEASUREMENTS) {
+        xTimerStop(xTimer, 0);
+        vTaskSuspend(filter_task);
+        vTaskResume(print_task);
+        gpio_led_state(LED6_BLUE_ID, 1);
         return;
     }
 
-    if (measurement_count % 2 == 0) {
-        gpio_led_state(LED6_BLUE_ID, 1);
-    } else {
-        gpio_led_state(LED6_BLUE_ID, 0);
-    }
-
+    /* Obtain the measurement by reading the values and sending them to the measurement queue */
     measurement_struct.x_value = x_displacement[measurement_count];
     measurement_struct.y_value = y_displacement[measurement_count];
     measurement_count++;
 
-    error_code = xQueueSendToBack(measurement_queue, &measurement_struct, 0);
-    if(error_code == pdFALSE) {
-        while(1);
+    /* Block if the queue was not emptied by the filtering task */
+    if(uxQueueMessagesWaiting(measurement_queue) == 1)
+    {
+        for(;;);
     }
+    xQueueSendToBack(measurement_queue, &measurement_struct, 0);
 
     /* Reset the timer and toggle the PIN for tracing purposes */
-    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_2);
+    TASK_4_FINISH;
     xTimerReset(xTimer, 0);
+    vTaskResume(filter_task);
 }
 
 static void filtering_task_function(void *pvParameters)
 {
+    /* Initialize two single-axis kinematic kalman filters used to
+     * smooth out the 'measured' displacement data. This task executes
+     * configTIME_REDUNDANT_INSTANCES times seemingly in parallel.
+     */
     BaseType_t error_code = 0;
     BaseType_t instance_number = 0;
     kf_t * x_kalman_filter = NULL;
     kf_t * y_kalman_filter = NULL;
     kalman_state_t * filter_state = NULL;
     measurement_t measurement_struct = {0};
-    double x_measurement = 0;
-    double y_measurement = 0;
+    result_t result_struct = {0};
 
     instance_number = xTaskGetInstanceNumber();
 
@@ -132,26 +133,19 @@ static void filtering_task_function(void *pvParameters)
         kalman_init(&y_kalman_filter->xp, &y_kalman_filter->Pp, &filter_state->y_state[instance_number], &filter_state->y_cov[instance_number]);
     }
 
-    while (1) {
-        if (uxQueueMessagesWaiting(measurement_queue)) {
-
-            if (xTaskGetInstanceNumber() == 0)
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
+    for(;;) {
+            gpio_trace_instance(instance_number);
 
             /* Predict the system state */
             kalman_predict(x_kalman_filter);
             kalman_predict(y_kalman_filter);
 
-            xQueueReceive(measurement_queue, &measurement_struct, 0);
-            x_measurement = measurement_struct.x_value;
-            y_measurement = measurement_struct.y_value;
+            /* Obtain the measurements */
+            xQueuePeek(measurement_queue, &measurement_struct, 0);
 
             /* Run the filter on the measurements */
-            kalman_update(x_kalman_filter, x_measurement);
-            kalman_update(y_kalman_filter, y_measurement);
-
-            if (xTaskGetInstanceNumber() == 0)
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
+            kalman_update(x_kalman_filter, measurement_struct.x_value);
+            kalman_update(y_kalman_filter, measurement_struct.y_value);
 
             /* Update system state */
             kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
@@ -159,38 +153,75 @@ static void filtering_task_function(void *pvParameters)
             kalman_state->y_state[instance_number].data[0] = y_kalman_filter->xp.data[0];
             kalman_state->y_state[instance_number].data[1] = y_kalman_filter->xp.data[1];
 
-            if (xTaskGetInstanceNumber() == 0)
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5);
+            /* Send results to print queue */
+            result_struct.x_pos = x_kalman_filter->xp.data[0];
+            result_struct.y_pos = y_kalman_filter->xp.data[0];
+            result_struct.x_vel = x_kalman_filter->xp.data[1];
+            result_struct.y_vel = y_kalman_filter->xp.data[1];
 
-            /* Execute the following block only once */
-            if ( xTaskGetInstanceNumber() == 0) {
-                /* Print the filtered data */
-                SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf", measurement_count, x_measurement, y_measurement,
-                    x_kalman_filter->xp.data[0], y_kalman_filter->xp.data[0]);
+            /* Compare the results from multiple instances and run the failure handle if they differ */
+            xTaskInstanceDone( (int) (result_struct.x_pos + result_struct.y_pos) * 1e5);
+            gpio_trace_instance(instance_number);
+
+            /* First thread to leave the barrier clears the queue */
+            xQueueReceive(measurement_queue, &measurement_struct, 0);
+
+            /* Send a new entry to the results/print queue */
+            if (instance_number == 0) {
+                xQueueSendToBack(results_queue, &result_struct, 0);
             }
 
-            if (xTaskGetInstanceNumber() == 0)
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5);
+            vTaskCallAPISynchronized(filter_task, vTaskSuspend);
+    }
+}
 
-            /* Successful instance finish */
-            xTaskInstanceDone(1);
+static void print_measurement_data(void *pvParameters)
+{
+    /* Print task waits for the filtering to be completed.
+     * After being unblocked the task will print out all the
+     * results.
+     */
+    (void) pvParameters;
+    result_t filtering_result = {0};
+    int data_point = 0;
+
+    for(;;) {
+        /* Print task waits for the result messages */
+        if (!uxQueueMessagesWaiting(results_queue))
+        {
+            vTaskDelay(100);
+            continue;
         }
+
+        data_point++;
+        xQueueReceive(results_queue, &filtering_result, 0);
+
+        SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf", data_point,
+            filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
     }
 }
 
 static void filter_failure_handler(void)
 {
-    /* Return the task state to previous values */
-    return;
+    /* This failure handle is activated when the task results
+     * differ. It should return the task to the last known
+     * correct state.
+     */
+    for(;;);
 }
 
 static void filter_timeout_handler(void)
 {
-    /* Free task related resources in the failure handler */
+    /* This failure handle is activated when the redundant
+     * task times out. Task is restarted after running this
+     * function, so the filter resources need to be cleaned
+     * up, along with setting up the future task state.
+     */
     for (int i = 0; i < TASK_INSTANCES; i++) {
         kalman_destroy(filter_storage.x_filters[i]);
         kalman_destroy(filter_storage.y_filters[i]);
     }
+    for(;;);
 }
 
 void application_init(void)
@@ -202,22 +233,38 @@ void application_init(void)
     BaseType_t error = 0;
     TaskFailureHandles_t failure_handles = {0};
 
+    gpio_led_state(LED5_RED_ID, 1);
     SERIAL_PRINT(INIT_MSG);
 
-    /* Measurement queue initialization */
-    measurement_queue = xQueueCreate(100, sizeof(measurement_t));
+    /* Measurement queue creation, single measurement */
+    measurement_queue = xQueueCreate(1, sizeof(measurement_t));
     if (!measurement_queue) {
         while(1);
     }
 
+    /* Result print queue creation */
+    results_queue = xQueueCreate(MEASUREMENTS, sizeof(result_t));
+    if (!results_queue) {
+        while(1);
+    }
+
     /* Measurement receive timer: measurements arrive every 40 ms */
-    measurement_timer = xTimerCreate((const char *) "Measurement", 40/portTICK_RATE_MS, pdFALSE, NULL, displacement_data_update);
+    measurement_timer = xTimerCreate((const char *) "Measurement", 40/portTICK_RATE_MS, pdFALSE,
+        NULL, displacement_data_update);
     if (!measurement_timer) {
         while(1);
     }
 
     /* Create a Kalman filter calculation task (time redundant task) */
-    error = xTaskCreate(filtering_task_function, (const char *) "Kalman", configMINIMAL_STACK_SIZE * 2, NULL, configMAX_PRIORITIES-2, &filter_task, pdMS_TO_TICKS(100));
+    error = xTaskCreate(filtering_task_function, (const char *) "Kalman",
+        configMINIMAL_STACK_SIZE * 2, NULL, configMAX_PRIORITIES-2, &filter_task, pdMS_TO_TICKS(2000));
+    if (error <= 0) {
+        while(1);
+    }
+
+    /* Create a single copy of a non critical UART print task */
+    error = xTaskCreateInstance(print_measurement_data, (const char *) "Print",
+        configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-3, &print_task);
     if (error <= 0) {
         while(1);
     }
@@ -243,6 +290,6 @@ void application_init(void)
     vTaskStoreData(filter_task, kalman_state);
 
     xTimerStart(measurement_timer, 0);
-    gpio_led_state(LED5_RED_ID, 1);
+    vTaskSuspend(print_task);
     vTaskStartScheduler();
 }

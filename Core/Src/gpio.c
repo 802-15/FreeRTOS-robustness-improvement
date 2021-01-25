@@ -40,6 +40,21 @@ void gpio_led_state(uint8_t LED_ID, uint8_t state)
         break;
   }
 }
+
+void gpio_trace_instance(uint8_t task_instance)
+{
+  switch(task_instance) {
+    case 0:
+      HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_2);
+    case 1:
+      HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
+    case 2:
+      HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
+    /* No need to test with more than 3 instances */
+    default:
+      break;
+  }
+}
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/

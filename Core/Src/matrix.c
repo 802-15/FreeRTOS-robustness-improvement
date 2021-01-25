@@ -111,7 +111,7 @@ void vector_add_subtract(vector_t * result, vector_t * vector1, vector_t * vecto
 double vector_row_column_multiply(vector_t * vector1, vector_t * vector2)
 {
     /* Multiply a row and column to a scalar result */
-    return (vector1->data[0] * vector2->data[0] + vector1->data[1] * vector2->data[1]); 
+    return (vector1->data[0] * vector2->data[0] + vector1->data[1] * vector2->data[1]);
 }
 
 void vector_column_row_multiply(matrix_t * result, vector_t * vector1, vector_t * vector2)

@@ -39,6 +39,13 @@ extern UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN Private defines */
 
+extern char usart_message_buffer[256];
+
+/* Formatting macro */
+#define SERIAL_PRINT(FORMAT,...) \
+    lightFormat(usart_message_buffer, FORMAT "\r\n", ##__VA_ARGS__ ); \
+    USART1_SendString(usart_message_buffer);
+
 /* USER CODE END Private defines */
 
 void MX_USART1_UART_Init(void);

@@ -43,6 +43,7 @@
 #include "usart.h"
 #include "xformatc.h"
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,7 +55,7 @@ extern "C" {
     "Built:" __DATE__ " " __TIME__ "\r\n"
 
 /* Set this to the number of task instances */
-#define TASK_INSTANCES 3
+#define TASK_INSTANCES configTIME_REDUNDANT_INSTANCES
 
 /* This struct holds kalman filter pointers */
 typedef struct kalman_handle {
@@ -76,6 +77,13 @@ typedef struct measurement {
     double x_value;
     double y_value;
 } measurement_t;
+
+typedef struct result {
+    double x_pos;
+    double x_vel;
+    double y_pos;
+    double y_vel;
+} result_t;
 
 /* Start up the application */
 void application_init(void);

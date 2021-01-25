@@ -44,6 +44,16 @@ extern "C" {
 #define LED5_RED_PinNumber GPIO_PIN_14
 #define LED6_BLUE_PinNumber GPIO_PIN_15
 
+/* GPIO trace macros */
+#define TASK_1_START    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2, GPIO_PIN_SET);
+#define TASK_1_FINISH   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2, GPIO_PIN_RESET);
+#define TASK_2_START    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
+#define TASK_2_FINISH   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET);
+#define TASK_3_START    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_4, GPIO_PIN_SET);
+#define TASK_3_FINISH   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_4, GPIO_PIN_RESET);
+#define TASK_4_START    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_SET);
+#define TASK_4_FINISH   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);
+
 /* USER CODE END Private defines */
 
 void MX_GPIO_Init(void);
@@ -51,6 +61,7 @@ void MX_GPIO_Init(void);
 /* USER CODE BEGIN Prototypes */
 
 void gpio_led_state (uint8_t LED_ID, uint8_t state);
+void gpio_trace_instance(uint8_t task_instance);
 
 /* USER CODE END Prototypes */
 
