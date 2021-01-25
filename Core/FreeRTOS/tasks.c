@@ -1458,7 +1458,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
     }
 
     void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
-                                      TaskFailureHandles_t * pxFailureHandles )
+                                       TaskFailureHandles_t * pxFailureHandles )
     {
         /* Store pointer to redundant task failure function.
          * This function should perform some sort of error handling specified
@@ -1561,7 +1561,8 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         BaseType_t i = 0;
         TaskHandle_t currentTaskInstance = NULL;
         TCB_t * currentTCB = NULL;
-        TCB_t * iterTCB = NULL;
+        TCB_t * iterTCB1 = NULL;
+        TCB_t * iterTCB2 = NULL;
 
         taskENTER_CRITICAL();
 
@@ -1578,16 +1579,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         currentTCB->uxExecResult = uxExecResult;
         currentTCB->uxExecCount++;
 
-        /* Instances returning pdPASS will be marked by 'done', otherwise they are treated as failed */
-        if( currentTCB->uxExecResult == pdPASS )
-        {
-            currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_DONE;
-        }
-        else
-        {
-            currentTCB->uxInstanceState = pdFREERTOS_INSTANCE_FAILED;
-        }
-
         taskEXIT_CRITICAL();
 
         /* Enter the barrier and wait until all threads are there */
@@ -1603,24 +1594,15 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         taskENTER_CRITICAL();
 
         /* Evaluate the overall execution state of the task by checking if instance is in the 'DONE' state */
-        for( i = 0; i < configTIME_REDUNDANT_INSTANCES; i++ )
+        for( i = 0; i < configTIME_REDUNDANT_INSTANCES - 1; i++ )
         {
-            if( i == 0 )
-            {
-                iterTCB = prvGetTCBFromHandle( *pxCurrentTCB->pxRedundantTask->pxInstances[ i ] );
-            }
-            else
-            {
-                iterTCB = *pxCurrentTCB->pxRedundantTask->pxInstances[ i ];
-            }
+            iterTCB1 = *pxCurrentTCB->pxRedundantTask->pxInstances[ i ];
+            iterTCB2 = *pxCurrentTCB->pxRedundantTask->pxInstances[ i + 1 ];
 
-            if( iterTCB->uxInstanceState != pdFREERTOS_INSTANCE_DONE )
+            if( iterTCB1->uxExecResult != iterTCB2->uxExecResult )
             {
                 xReturn = pdFAIL;
             }
-
-            /* Reset the instance states */
-            iterTCB->uxInstanceState = pdFREERTOS_INSTANCE_RUNNING;
         }
 
         if( xReturn == pdFAIL )
@@ -1668,7 +1650,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         uint32_t usStackSize = 0;
         void * pvParameters = NULL;
         TaskFunction_t pxTaskCode = NULL;
-        TaskFailureHandles_t xFailureHandles = {0};
+        TaskFailureHandles_t xFailureHandles = { 0 };
         callbackContainer_t * pxCallbackContainer = NULL;
         BaseType_t xReturn = pdFAIL;
 
