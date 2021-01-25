@@ -357,6 +357,15 @@ typedef void (* TaskFailureFunction_t ) ( void );
  */
 typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 
+/*
+ * Pass redundant task failure functions to FreeRTOS using this structure
+ */
+typedef struct
+{
+    TaskFailureFunction_t pvResultFailure;
+    TaskFailureFunction_t pvTimeoutFailure;
+} TaskFailureHandles_t;
+
 /**
  * task.h
  * <pre>
@@ -433,22 +442,22 @@ typedef void (* TaskAPICode_t ) ( TaskHandle_t );
  * task.h
  * <pre>
  * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
- *                                    TaskFailureFunction_t pvFailureFunc );
+ *                                    TaskFailureHandles_t pxFailureHandles );
  * </pre>
  *
- * Register failure function for a redundant task.
+ * Register failure functions for a redundant task.
  *
- * The function pointer must be supplied in the argument. The function itself should run
- * some kind of error handling defined by the user.
+ * Pass pointers to two user defined functions, activated when the
+ * redundant task results differ, or if the task times out.
  *
  *
  * @param taskHandle Redundant task handle
  *
- * @param pvFailureFunc Pointer to the failure function.
+ * @param pxFailureHandles Pointer to struct containing failure handles
  *
  */
     void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
-                                       TaskFailureFunction_t pvFailureFunc );
+                                      TaskFailureHandles_t * pxFailureHandles );
 
 /**
  * task.h

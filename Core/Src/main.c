@@ -113,12 +113,36 @@ void vTimerCallback(TimerHandle_t xTimer)
   vTaskResume(blinkyHandle);
  }
 
-void blinkyFailureTest(void)
+void blinkyResultFailure(void)
 {
-  /* Dummy failure function that blinks the leds.
-     This function will be executed by a single thread. */
+  /* This function runs when the redundant task results differ */
   const TickType_t xDelay = 200/portTICK_RATE_MS;
   int blinkTimes = 10;
+
+  while(blinkTimes) {
+    gpio_led_state(LED3_ORANGE_ID, 1);
+    gpio_led_state(LED5_RED_ID, 1);
+    gpio_led_state(LED4_GREEN_ID, 1);
+    gpio_led_state(LED6_BLUE_ID, 1);
+
+    vTaskDelay(xDelay);
+
+    gpio_led_state(LED3_ORANGE_ID, 0);
+    gpio_led_state(LED5_RED_ID, 0);
+    gpio_led_state(LED4_GREEN_ID, 0);
+    gpio_led_state(LED6_BLUE_ID, 0);
+
+    vTaskDelay(xDelay);
+    blinkTimes--;
+  }
+  SERIAL_PRINT("Done running failure handle!");
+}
+
+void blinkyTimeoutFailure(void)
+{
+  /* This function runs when the redundant task times out */
+  const TickType_t xDelay = 20/portTICK_RATE_MS;
+  int blinkTimes = 40;
 
   while(blinkTimes) {
     gpio_led_state(LED3_ORANGE_ID, 1);
@@ -190,6 +214,7 @@ static void blinkTask(void *pvParameters)
 int main(void)
 {
   int error = 0;
+  TaskFailureHandles_t xFailureHandles = {0};
 
   /* Start up the peripherals */
   HAL_Init();
@@ -207,7 +232,9 @@ int main(void)
   }
 
   /* Demonstration failure handle is registered */
-  vTaskRegisterFailureCallback( blinkyHandle, &blinkyFailureTest );
+  xFailureHandles.pvResultFailure = blinkyResultFailure;
+  xFailureHandles.pvTimeoutFailure = blinkyTimeoutFailure;
+  vTaskRegisterFailureCallback( blinkyHandle, &xFailureHandles );
 
   /* Task unblock timer */
   blinkyTimerHandle = xTimerCreate("Timer2", pdMS_TO_TICKS(7000), pdTRUE, ( void * ) 0, vTimerCallback);
