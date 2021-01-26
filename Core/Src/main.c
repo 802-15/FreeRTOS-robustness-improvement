@@ -70,6 +70,7 @@ int main(void)
   MX_GPIO_Init();
   HAL_UART_MspInit(&huart1);
   MX_USART1_UART_Init();
+  MX_RNG_Init();
 
   /* Start up the demo application */
   application_init();

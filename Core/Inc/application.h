@@ -42,6 +42,7 @@
 #include "kalman_data.h"
 #include "usart.h"
 #include "xformatc.h"
+#include "rng.h"
 
 
 #ifdef __cplusplus
@@ -57,11 +58,16 @@ extern "C" {
 /* Set this to the number of task instances */
 #define TASK_INSTANCES configTIME_REDUNDANT_INSTANCES
 
+/* Application timings (ms) */
+#define CAUSE_FAULTS 1
+#define TIMER_PERIOD 40
+#define FILTER_TIMEOUT 20
+#define FAULT_PERIOD 50
+
 /* This struct holds kalman filter pointers */
 typedef struct kalman_handle {
     kf_t * x_filters[TASK_INSTANCES];
     kf_t * y_filters[TASK_INSTANCES];
-
 } kalman_handle_t;
 
 /* Kalman system states */
@@ -78,6 +84,7 @@ typedef struct measurement {
     double y_value;
 } measurement_t;
 
+/* Used to pass filtered information to print task */
 typedef struct result {
     double x_pos;
     double x_vel;

@@ -157,3 +157,9 @@ double kalman_update(kf_t * filter, double measurement)
     /* Returns the P matrix trace */
     return filter->Pp.data[0][0] + filter->Pp.data[1][1];
 }
+
+void modify_states(kf_t * filter, double value_change)
+{
+    filter->xp.data[0] += value_change;
+    filter->xp.data[1] += value_change;
+}

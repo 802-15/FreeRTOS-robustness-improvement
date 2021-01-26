@@ -160,4 +160,20 @@ void kalman_predict(kf_t * filter);
  */
 double kalman_update(kf_t * filter, double measurement);
 
+/**
+ * kalman.h
+ * <pre>
+ * void modify_states(kf_t * filter, double value_change);
+ * </pre>
+ *
+ * Perturb the kalman system states to cause an error in
+ * redundant instance execution.
+ *
+ * @param filter Pointer to kalman filter structure
+ *
+ * @param value_change Value to be added to the system states
+ *
+ */
+void modify_states(kf_t * filter, double value_change);
+
 #endif /* __KALMAN_H */

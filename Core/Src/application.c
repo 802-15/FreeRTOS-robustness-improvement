@@ -35,6 +35,7 @@
 /* FreeRTOS handles */
 static TaskHandle_t filter_task = NULL;
 static TaskHandle_t print_task = NULL;
+static TaskHandle_t fault_task = NULL;
 static TimerHandle_t measurement_timer = NULL;
 static QueueHandle_t measurement_queue = NULL;
 static QueueHandle_t results_queue = NULL;
@@ -43,14 +44,16 @@ static QueueHandle_t results_queue = NULL;
 static BaseType_t measurement_count = 1;
 
 /* Filter state restoration and cleanup structures */
-kalman_handle_t filter_storage = {0};
-kalman_state_t * kalman_state = NULL;
+static kalman_handle_t filter_storage = {0};
+static kalman_state_t * kalman_state = NULL;
 
 /* Default filter values */
-vector_t default_x_state = {0};
-vector_t default_y_state = {0};
-vector_t default_x_cov = {0};
-vector_t default_y_cov = {0};
+static vector_t default_x_state = {0};
+static vector_t default_y_state = {0};
+static vector_t default_x_cov = {0};
+static vector_t default_y_cov = {0};
+
+static int block_threads = 0;
 
 static void displacement_data_update(TimerHandle_t xTimer)
 {
@@ -100,6 +103,7 @@ static void filtering_task_function(void *pvParameters)
      */
     BaseType_t error_code = 0;
     BaseType_t instance_number = 0;
+    BaseType_t task_successful = pdFALSE;
     kf_t * x_kalman_filter = NULL;
     kf_t * y_kalman_filter = NULL;
     kalman_state_t * filter_state = NULL;
@@ -136,6 +140,12 @@ static void filtering_task_function(void *pvParameters)
     for(;;) {
             gpio_trace_instance(instance_number);
 
+            /* Task instance will be blocked here if one of the semaphores were taken*/
+            if (block_threads) {
+                gpio_trace_instance(instance_number);
+                for(;;);
+            }
+
             /* Predict the system state */
             kalman_predict(x_kalman_filter);
             kalman_predict(y_kalman_filter);
@@ -147,30 +157,32 @@ static void filtering_task_function(void *pvParameters)
             kalman_update(x_kalman_filter, measurement_struct.x_value);
             kalman_update(y_kalman_filter, measurement_struct.y_value);
 
-            /* Update system state */
-            kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
-            kalman_state->x_state[instance_number].data[1] = x_kalman_filter->xp.data[1];
-            kalman_state->y_state[instance_number].data[0] = y_kalman_filter->xp.data[0];
-            kalman_state->y_state[instance_number].data[1] = y_kalman_filter->xp.data[1];
-
-            /* Send results to print queue */
-            result_struct.x_pos = x_kalman_filter->xp.data[0];
-            result_struct.y_pos = y_kalman_filter->xp.data[0];
-            result_struct.x_vel = x_kalman_filter->xp.data[1];
-            result_struct.y_vel = y_kalman_filter->xp.data[1];
-
             /* Compare the results from multiple instances and run the failure handle if they differ */
-            xTaskInstanceDone( (int) (result_struct.x_pos + result_struct.y_pos) * 1e5);
+            task_successful = xTaskInstanceDone( (int) (measurement_struct.x_value + measurement_struct.y_value) * 1e5);
             gpio_trace_instance(instance_number);
 
             /* First thread to leave the barrier clears the queue */
             xQueueReceive(measurement_queue, &measurement_struct, 0);
 
-            /* Send a new entry to the results/print queue */
+            /* Return task execution state back to the application */
+            if (task_successful == pdTRUE) {
+                /* Update system state */
+                kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
+                kalman_state->x_state[instance_number].data[1] = x_kalman_filter->xp.data[1];
+                kalman_state->y_state[instance_number].data[0] = y_kalman_filter->xp.data[0];
+                kalman_state->y_state[instance_number].data[1] = y_kalman_filter->xp.data[1];
+            }
+
             if (instance_number == 0) {
+                /* Send results to print queue */
+                result_struct.x_pos = x_kalman_filter->xp.data[0];
+                result_struct.y_pos = y_kalman_filter->xp.data[0];
+                result_struct.x_vel = x_kalman_filter->xp.data[1];
+                result_struct.y_vel = y_kalman_filter->xp.data[1];
                 xQueueSendToBack(results_queue, &result_struct, 0);
             }
 
+            /* Wait for the next measurement (timer update) */
             vTaskCallAPISynchronized(filter_task, vTaskSuspend);
     }
 }
@@ -207,7 +219,13 @@ static void filter_failure_handler(void)
      * differ. It should return the task to the last known
      * correct state.
      */
-    for(;;);
+    for (int i = 0; i < TASK_INSTANCES; i++) {
+        filter_storage.x_filters[i]->xp.data[0] = kalman_state->x_state[i].data[0];
+        filter_storage.x_filters[i]->xp.data[1] = kalman_state->x_state[i].data[1];
+        filter_storage.y_filters[i]->xp.data[0] = kalman_state->y_state[i].data[0];
+        filter_storage.y_filters[i]->xp.data[1] = kalman_state->y_state[i].data[1];
+    }
+    /* Continue executing task */
 }
 
 static void filter_timeout_handler(void)
@@ -217,11 +235,57 @@ static void filter_timeout_handler(void)
      * function, so the filter resources need to be cleaned
      * up, along with setting up the future task state.
      */
+
+    block_threads = 0;
+
     for (int i = 0; i < TASK_INSTANCES; i++) {
         kalman_destroy(filter_storage.x_filters[i]);
         kalman_destroy(filter_storage.y_filters[i]);
     }
-    for(;;);
+    /* Task is deleted and created again (restart) ...*/
+}
+
+static void fault_task_function(void *pvParameters)
+{
+    /* Cause a fault what will make the task time out,
+     * or introduce a difference in the final result.
+     */
+    (void) pvParameters;
+    uint32_t random_number;
+    uint8_t random_byte;
+
+    for(;;) {
+        if (CAUSE_FAULTS == 0) {
+            vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
+            continue;
+        }
+
+        random_number = get_random_integer();
+        random_byte = random_number % 3;
+
+        switch (random_byte) {
+            case 0:
+                block_threads = 1;
+                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_6);
+                break;
+#if 0
+            case 1:
+                modify_states(filter_storage.x_filters[0], 100000);
+                modify_states(filter_storage.y_filters[0], 100000);
+                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
+                break;
+            case 2:
+                modify_states(filter_storage.x_filters[1], -10);
+                modify_states(filter_storage.y_filters[1], -10);
+                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
+                break;
+#endif
+            default:
+                break;
+        }
+
+        vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
+    }
 }
 
 void application_init(void)
@@ -249,7 +313,7 @@ void application_init(void)
     }
 
     /* Measurement receive timer: measurements arrive every 40 ms */
-    measurement_timer = xTimerCreate((const char *) "Measurement", 40/portTICK_RATE_MS, pdFALSE,
+    measurement_timer = xTimerCreate((const char *) "Measurement", TIMER_PERIOD/portTICK_RATE_MS, pdFALSE,
         NULL, displacement_data_update);
     if (!measurement_timer) {
         while(1);
@@ -257,7 +321,7 @@ void application_init(void)
 
     /* Create a Kalman filter calculation task (time redundant task) */
     error = xTaskCreate(filtering_task_function, (const char *) "Kalman",
-        configMINIMAL_STACK_SIZE * 2, NULL, configMAX_PRIORITIES-2, &filter_task, pdMS_TO_TICKS(2000));
+        configMINIMAL_STACK_SIZE * 2, NULL, configMAX_PRIORITIES-2, &filter_task, FILTER_TIMEOUT/portTICK_RATE_MS);
     if (error <= 0) {
         while(1);
     }
@@ -265,6 +329,13 @@ void application_init(void)
     /* Create a single copy of a non critical UART print task */
     error = xTaskCreateInstance(print_measurement_data, (const char *) "Print",
         configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-3, &print_task);
+    if (error <= 0) {
+        while(1);
+    }
+
+    /* Create a single copy of a fault inducing task */
+    error = xTaskCreateInstance(fault_task_function, (const char *) "Generate fault",
+        configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-2, &fault_task);
     if (error <= 0) {
         while(1);
     }

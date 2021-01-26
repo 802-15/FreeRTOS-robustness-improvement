@@ -29,6 +29,8 @@ extern "C" {
 
 /* USER CODE BEGIN Includes */
 
+#include "stm32f4xx_hal_rng.h"
+
 /* USER CODE END Includes */
 
 extern RNG_HandleTypeDef hrng;
@@ -40,6 +42,8 @@ extern RNG_HandleTypeDef hrng;
 void MX_RNG_Init(void);
 
 /* USER CODE BEGIN Prototypes */
+
+uint32_t get_random_integer(void);
 
 /* USER CODE END Prototypes */
 

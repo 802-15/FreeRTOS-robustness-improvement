@@ -48,6 +48,10 @@ void HAL_RNG_MspInit(RNG_HandleTypeDef* rngHandle)
   /* USER CODE END RNG_MspInit 0 */
     /* RNG clock enable */
     __HAL_RCC_RNG_CLK_ENABLE();
+
+    /* RNG interrupt Init */
+    HAL_NVIC_SetPriority(HASH_RNG_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(HASH_RNG_IRQn);
   /* USER CODE BEGIN RNG_MspInit 1 */
 
   /* USER CODE END RNG_MspInit 1 */
@@ -64,6 +68,9 @@ void HAL_RNG_MspDeInit(RNG_HandleTypeDef* rngHandle)
   /* USER CODE END RNG_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_RNG_CLK_DISABLE();
+
+    /* RNG interrupt Deinit */
+    HAL_NVIC_DisableIRQ(HASH_RNG_IRQn);
   /* USER CODE BEGIN RNG_MspDeInit 1 */
 
   /* USER CODE END RNG_MspDeInit 1 */
@@ -71,6 +78,20 @@ void HAL_RNG_MspDeInit(RNG_HandleTypeDef* rngHandle)
 }
 
 /* USER CODE BEGIN 1 */
+
+uint32_t get_random_integer(void)
+{
+  int error = 0;
+  uint32_t random_number = 0;
+
+  error = HAL_RNG_GenerateRandomNumber(&hrng, &random_number);
+  if(error != HAL_OK)
+  {
+    return 0;
+  }
+
+  return random_number;
+}
 
 /* USER CODE END 1 */
 
