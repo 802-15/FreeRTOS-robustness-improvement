@@ -50,9 +50,10 @@ static kalman_state_t * kalman_state = NULL;
 /* Default filter values */
 static vector_t default_x_state = {0};
 static vector_t default_y_state = {0};
-static vector_t default_x_cov = {0};
-static vector_t default_y_cov = {0};
+static matrix_t default_x_cov = {0};
+static matrix_t default_y_cov = {0};
 
+/* Threads time out if this is not 0 */
 static int block_threads = 0;
 
 static void displacement_data_update(TimerHandle_t xTimer)
@@ -95,6 +96,31 @@ static void displacement_data_update(TimerHandle_t xTimer)
     vTaskResume(filter_task);
 }
 
+static int check_thresholds(kf_t * x_filter, kf_t * y_filter, int instance_number)
+{
+    /* Check if displacement and velocity have increased beyond acceptable limits
+     * within one sampling interval. This is used to check if the filter values
+     * have started to diverge. Check both x and y filters.
+     */
+    if (fabs(x_filter->xp.data[0] - kalman_state->x_state[instance_number].data[0]) > 5.0) {
+        return TASK_FAILURE;
+    }
+
+    if (fabs(x_filter->xp.data[1] - kalman_state->x_state[instance_number].data[1] > 50.0)) {
+        return TASK_FAILURE;
+    }
+
+    if (fabs(y_filter->xp.data[0] - kalman_state->y_state[instance_number].data[0]) > 5.0) {
+        return TASK_FAILURE;
+    }
+
+    if (fabs(y_filter->xp.data[1] - kalman_state->y_state[instance_number].data[1] > 50.0)) {
+        return TASK_FAILURE;
+    }
+
+    return TASK_SUCCESS;
+}
+
 static void filtering_task_function(void *pvParameters)
 {
     /* Initialize two single-axis kinematic kalman filters used to
@@ -103,7 +129,7 @@ static void filtering_task_function(void *pvParameters)
      */
     BaseType_t error_code = 0;
     BaseType_t instance_number = 0;
-    BaseType_t task_successful = pdFALSE;
+    BaseType_t instance_states = pdFALSE;
     kf_t * x_kalman_filter = NULL;
     kf_t * y_kalman_filter = NULL;
     kalman_state_t * filter_state = NULL;
@@ -157,23 +183,39 @@ static void filtering_task_function(void *pvParameters)
             kalman_update(x_kalman_filter, measurement_struct.x_value);
             kalman_update(y_kalman_filter, measurement_struct.y_value);
 
-            /* Compare the results from multiple instances and run the failure handle if they differ */
-            task_successful = xTaskInstanceDone( (int) (measurement_struct.x_value + measurement_struct.y_value) * 1e5);
-            gpio_trace_instance(instance_number);
+            /* Evaluate states by checking if the application thresholds are met */
+            if (check_thresholds(x_kalman_filter, y_kalman_filter, instance_number) == TASK_SUCCESS) {
+                instance_states = xTaskInstanceDone(TASK_SUCCESS);
+            } else {
+                instance_states = xTaskInstanceDone(TASK_FAILURE);
+            }
 
-            /* First thread to leave the barrier clears the queue */
-            xQueueReceive(measurement_queue, &measurement_struct, 0);
-
-            /* Return task execution state back to the application */
-            if (task_successful == pdTRUE) {
+            /* Update last known good state if the execution is allright */
+            if (instance_states == pdTRUE && (check_thresholds(x_kalman_filter, y_kalman_filter, instance_number) == TASK_SUCCESS)) {
                 /* Update system state */
                 kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
                 kalman_state->x_state[instance_number].data[1] = x_kalman_filter->xp.data[1];
                 kalman_state->y_state[instance_number].data[0] = y_kalman_filter->xp.data[0];
                 kalman_state->y_state[instance_number].data[1] = y_kalman_filter->xp.data[1];
+                /* Update system covariance */
+                kalman_state->x_cov[instance_number].data[0][0] = x_kalman_filter->Pp.data[0][0];
+                kalman_state->x_cov[instance_number].data[0][1] = x_kalman_filter->Pp.data[0][1];
+                kalman_state->x_cov[instance_number].data[1][0] = x_kalman_filter->Pp.data[1][0];
+                kalman_state->x_cov[instance_number].data[1][1] = x_kalman_filter->Pp.data[1][1];
+
+                kalman_state->y_cov[instance_number].data[0][0] = y_kalman_filter->Pp.data[0][0];
+                kalman_state->y_cov[instance_number].data[0][1] = y_kalman_filter->Pp.data[0][1];
+                kalman_state->y_cov[instance_number].data[1][0] = y_kalman_filter->Pp.data[1][0];
+                kalman_state->y_cov[instance_number].data[1][1] = y_kalman_filter->Pp.data[1][1];
             }
 
-            if (instance_number == 0) {
+            /* Compare the results from multiple instances and run the failure handle if they differ */
+            gpio_trace_instance(instance_number);
+
+            /* First thread to leave the barrier clears the queue */
+            xQueueReceive(measurement_queue, &measurement_struct, 0);
+
+            if (instance_number == 0 ) {
                 /* Send results to print queue */
                 result_struct.x_pos = x_kalman_filter->xp.data[0];
                 result_struct.y_pos = y_kalman_filter->xp.data[0];
@@ -208,7 +250,7 @@ static void print_measurement_data(void *pvParameters)
         data_point++;
         xQueueReceive(results_queue, &filtering_result, 0);
 
-        SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf", data_point,
+        SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
             filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
     }
 }
@@ -220,10 +262,8 @@ static void filter_failure_handler(void)
      * correct state.
      */
     for (int i = 0; i < TASK_INSTANCES; i++) {
-        filter_storage.x_filters[i]->xp.data[0] = kalman_state->x_state[i].data[0];
-        filter_storage.x_filters[i]->xp.data[1] = kalman_state->x_state[i].data[1];
-        filter_storage.y_filters[i]->xp.data[0] = kalman_state->y_state[i].data[0];
-        filter_storage.y_filters[i]->xp.data[1] = kalman_state->y_state[i].data[1];
+        kalman_init(&filter_storage.x_filters[i]->xp, &filter_storage.x_filters[i]->Pp, &kalman_state->x_state[i], &kalman_state->x_cov[i]);
+        kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
     }
     /* Continue executing task */
 }
@@ -251,8 +291,8 @@ static void fault_task_function(void *pvParameters)
      * or introduce a difference in the final result.
      */
     (void) pvParameters;
-    uint32_t random_number;
-    uint8_t random_byte;
+    uint32_t random_uint;
+    uint8_t random_uchar;
 
     for(;;) {
         if (CAUSE_FAULTS == 0) {
@@ -260,15 +300,14 @@ static void fault_task_function(void *pvParameters)
             continue;
         }
 
-        random_number = get_random_integer();
-        random_byte = random_number % 3;
+        random_uint = get_random_integer();
+        random_uchar = random_uint % 3;
 
-        switch (random_byte) {
+        switch (random_uchar) {
             case 0:
                 block_threads = 1;
                 HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_6);
                 break;
-#if 0
             case 1:
                 modify_states(filter_storage.x_filters[0], 100000);
                 modify_states(filter_storage.y_filters[0], 100000);
@@ -279,7 +318,6 @@ static void fault_task_function(void *pvParameters)
                 modify_states(filter_storage.y_filters[1], -10);
                 HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
                 break;
-#endif
             default:
                 break;
         }
@@ -346,10 +384,10 @@ void application_init(void)
     default_y_state.data[0] = -0.2801;
     default_y_state.data[1] = 0;
 
-    default_x_cov.data[0] = 0.1;
-    default_x_cov.data[1] = 0.1;
-    default_y_cov.data[0] = 0.2;
-    default_y_cov.data[1] = 0.2;
+    default_x_cov.data[0][0] = 0.1;
+    default_x_cov.data[1][1] = 0.1;
+    default_y_cov.data[0][0] = 0.2;
+    default_y_cov.data[1][1] = 0.2;
 
     /* Task failure restoration/cleanup functions */
     failure_handles.pvResultFailure = filter_failure_handler;
@@ -358,6 +396,7 @@ void application_init(void)
 
     /* Store pointer to shared task data - pointer to global variable is stored for demonstration purposes */
     kalman_state = user_malloc(sizeof(kalman_state_t));
+    memset(kalman_state, 0, sizeof(kalman_state_t));
     vTaskStoreData(filter_task, kalman_state);
 
     xTimerStart(measurement_timer, 0);

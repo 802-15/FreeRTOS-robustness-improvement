@@ -98,13 +98,13 @@ void kalman_destroy(kf_t * filter)
     user_free(filter);
 }
 
-void kalman_init(vector_t * xp, matrix_t * Pp, vector_t * x_values, vector_t * P_values)
+void kalman_init(vector_t * xp, matrix_t * Pp, vector_t * x_values, matrix_t * P_values)
 {
     /* Set up covariance values */
-    Pp->data[0][0] = P_values->data[0];
+    Pp->data[0][0] = * P_values->data[0];
     Pp->data[0][1] = 0;
     Pp->data[0][1] = 0;
-    Pp->data[1][1] = P_values->data[1];
+    Pp->data[1][1] = * P_values->data[1];
 
     /* Set up state values */
     xp->data[0] = x_values->data[0];

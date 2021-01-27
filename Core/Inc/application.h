@@ -32,6 +32,8 @@
 #ifndef __APPLICATION_H
 #define __APPLICATION_H
 
+#include <math.h>
+
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
@@ -58,6 +60,10 @@ extern "C" {
 /* Set this to the number of task instances */
 #define TASK_INSTANCES configTIME_REDUNDANT_INSTANCES
 
+/* Task return codes */
+#define TASK_SUCCESS 0
+#define TASK_FAILURE 1
+
 /* Application timings (ms) */
 #define CAUSE_FAULTS 1
 #define TIMER_PERIOD 40
@@ -74,8 +80,8 @@ typedef struct kalman_handle {
 typedef struct kalman_state_storage {
     vector_t x_state[TASK_INSTANCES];
     vector_t y_state[TASK_INSTANCES];
-    vector_t x_cov[TASK_INSTANCES];
-    vector_t y_cov[TASK_INSTANCES];
+    matrix_t x_cov[TASK_INSTANCES];
+    matrix_t y_cov[TASK_INSTANCES];
 } kalman_state_t;
 
 /* Kalman filter measurement struct; for use with a queue */

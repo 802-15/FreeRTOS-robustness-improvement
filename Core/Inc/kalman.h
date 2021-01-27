@@ -108,7 +108,7 @@ void kalman_destroy(kf_t * filter);
 /**
  * kalman.h
  * <pre>
- * void kalman_init(vector_t * xp, matrix_t * Pp, vector_t x_values, vector_t P_values);
+ * void kalman_init(vector_t * xp, matrix_t * Pp, vector_t * x_values, matrix_t * P_values);
  * </pre>
  *
  * Initialize the kalman filter state and state covariance values.
@@ -120,10 +120,10 @@ void kalman_destroy(kf_t * filter);
  *
  * @param x_values Vector type which containts the initial state values
  *
- * @param y_values Vector type which contains the initial covariance  values
+ * @param P_values Matrix type which contains the initial covariance values
  *
  */
-void kalman_init(vector_t * xp, matrix_t * Pp, vector_t * x_values, vector_t * P_values);
+void kalman_init(vector_t * xp, matrix_t * Pp, vector_t * x_values, matrix_t * P_values);
 
 /**
  * kalman.h
