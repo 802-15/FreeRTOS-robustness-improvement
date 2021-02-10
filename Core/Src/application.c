@@ -41,9 +41,6 @@ static QueueHandle_t measurement_queue = NULL;
 static QueueHandle_t results_queue = NULL;
 static QueueHandle_t stats_queue = NULL;
 
-/* Measurement data */
-static BaseType_t measurement_count = 1;
-
 /* Filter state restoration and cleanup structures */
 static kalman_handle_t filter_storage = {0};
 static kalman_state_t * kalman_state = NULL;
@@ -57,6 +54,19 @@ static matrix_t default_y_cov = {0};
 /* Threads time out if this is not 0 */
 static int block_threads = 0;
 
+void vApplicationTickHook(void)
+{
+    static int watchdog_active = 0;
+
+    if ( !watchdog_active ) {
+        MX_WWDG_Init();
+        watchdog_active++;
+    }
+
+    /* Refresh the watchdog after task ticks */
+    HAL_WWDG_Refresh(&hwwdg);
+}
+
 static void displacement_data_update(TimerHandle_t xTimer)
 {
     /* Load data from the constant measurements array and store it
@@ -67,6 +77,7 @@ static void displacement_data_update(TimerHandle_t xTimer)
      */
     (void) xTimer;
     measurement_t measurement_struct = {0};
+    static BaseType_t measurement_count = 1;
 
     TASK_4_START
 
@@ -432,5 +443,6 @@ void application_init(void)
 
     xTimerStart(measurement_timer, 0);
     vTaskSuspend(print_task);
+
     vTaskStartScheduler();
 }

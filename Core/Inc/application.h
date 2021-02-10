@@ -45,6 +45,7 @@
 #include "usart.h"
 #include "xformatc.h"
 #include "rng.h"
+#include "wwdg.h"
 
 
 #ifdef __cplusplus
