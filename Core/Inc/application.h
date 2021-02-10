@@ -69,7 +69,8 @@ extern "C" {
 #define CAUSE_FAULTS 0
 #define TIMER_PERIOD 40
 #define FILTER_TIMEOUT 20
-#define FAULT_PERIOD 50
+#define FAULT_PERIOD 100
+#define PRINT_STATS 0
 
 /* This struct holds kalman filter pointers */
 typedef struct kalman_handle {

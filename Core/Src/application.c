@@ -51,9 +51,6 @@ static vector_t default_y_state = {0};
 static matrix_t default_x_cov = {0};
 static matrix_t default_y_cov = {0};
 
-/* Threads time out if this is not 0 */
-static int block_threads = 0;
-
 void vApplicationTickHook(void)
 {
     static int watchdog_active = 0;
@@ -63,7 +60,7 @@ void vApplicationTickHook(void)
         watchdog_active++;
     }
 
-    /* Refresh the watchdog after task ticks */
+    /* Refresh the watchdog on FreeRTOS tick */
     HAL_WWDG_Refresh(&hwwdg);
 }
 
@@ -85,6 +82,8 @@ static void displacement_data_update(TimerHandle_t xTimer)
     if (measurement_count >= MEASUREMENTS) {
         xTimerStop(xTimer, 0);
         vTaskSuspend(filter_task);
+        vTaskSuspend(fault_task);
+
         vTaskResume(print_task);
         gpio_led_state(LED6_BLUE_ID, 1);
         return;
@@ -180,12 +179,6 @@ static void filtering_task_function(void *pvParameters)
     for(;;) {
             gpio_trace_instance(instance_number);
 
-            /* Task instance will be blocked here if one of the semaphores were taken*/
-            if (block_threads) {
-                gpio_trace_instance(instance_number);
-                for(;;);
-            }
-
             /* Predict the system state */
             kalman_predict(x_kalman_filter);
             kalman_predict(y_kalman_filter);
@@ -257,7 +250,6 @@ static void print_measurement_data(void *pvParameters)
     (void) pvParameters;
     result_t filtering_result = {0};
     stats_t filtering_stats = {0};
-    int data_point = 0;
 
     for(;;) {
         /* Print task waits for the result messages */
@@ -268,7 +260,6 @@ static void print_measurement_data(void *pvParameters)
         }
 
         if (uxQueueMessagesWaiting(results_queue)) {
-            data_point++;
             xQueueReceive(results_queue, &filtering_result, 0);
 
             SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
@@ -277,7 +268,7 @@ static void print_measurement_data(void *pvParameters)
             continue;
         }
 
-        if (uxQueueMessagesWaiting(stats_queue)) {
+        if (uxQueueMessagesWaiting(stats_queue) && PRINT_STATS == 1) {
             xQueueReceive(stats_queue, &filtering_stats, 0);
 
             SERIAL_PRINT("%lu, %lu, %lu, %lu",
@@ -295,6 +286,9 @@ static void filter_failure_handler(void)
      * differ. It should return the task to the last known
      * correct state.
      */
+
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
+
     for (int i = 0; i < TASK_INSTANCES; i++) {
         kalman_init(&filter_storage.x_filters[i]->xp, &filter_storage.x_filters[i]->Pp, &kalman_state->x_state[i], &kalman_state->x_cov[i]);
         kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
@@ -310,7 +304,7 @@ static void filter_timeout_handler(void)
      * up, along with setting up the future task state.
      */
 
-    block_threads = 0;
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_0);
 
     for (int i = 0; i < TASK_INSTANCES; i++) {
         kalman_destroy(filter_storage.x_filters[i]);
@@ -326,7 +320,14 @@ static void fault_task_function(void *pvParameters)
      */
     (void) pvParameters;
     uint32_t random_uint;
+    int8_t * random_byte;
     uint8_t random_uchar;
+
+    const size_t ram_size = 0x20000;
+    const size_t ram_start = 0x20000000;
+
+    /* Set up the failure location manually */
+    size_t memory_address = 0x20000300;
 
     for(;;) {
         if (CAUSE_FAULTS == 0) {
@@ -334,28 +335,28 @@ static void fault_task_function(void *pvParameters)
             continue;
         }
 
-        random_uint = get_random_integer();
-        random_uchar = random_uint % 3;
+        /* Pin toggle for logic analyzer timing diagnostic */
+        HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
 
-        switch (random_uchar) {
-            case 0:
-                block_threads = 1;
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_6);
-                break;
-            case 1:
-                modify_states(filter_storage.x_filters[0], 100000);
-                modify_states(filter_storage.y_filters[0], 100000);
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
-                break;
-            case 2:
-                modify_states(filter_storage.x_filters[1], -10);
-                modify_states(filter_storage.y_filters[1], -10);
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
-                break;
-                /* Cause a bit flip on the task stack?? */
-                /* Or cause it on the entire memory?? */
-            default:
-                break;
+        if (CAUSE_FAULTS == 1) {
+            /* Overwrite byte value or modify bit value manually */
+            random_byte = ( int8_t * ) memory_address;
+            /* Run this one in debugger! */
+            * random_byte ^= ( 1 << get_random_integer() % 8);
+        }
+
+        if (CAUSE_FAULTS == 2) {
+            /* Flip a random address + bit */
+            random_uint = get_random_integer();
+            random_uchar = random_uint % 8;
+
+            memory_address = (random_uint % ram_size) + ram_start;
+            random_byte = ( int8_t * ) memory_address;
+
+            SERIAL_PRINT("Address: 0x%x, %lu, Bit: %u", memory_address, random_uint % ram_size, random_uchar);
+            vTaskDelay(100/portTICK_RATE_MS);
+
+            * random_byte ^= ( 1 << random_uchar);
         }
 
         vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
