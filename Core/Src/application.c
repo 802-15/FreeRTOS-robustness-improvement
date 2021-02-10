@@ -39,6 +39,7 @@ static TaskHandle_t fault_task = NULL;
 static TimerHandle_t measurement_timer = NULL;
 static QueueHandle_t measurement_queue = NULL;
 static QueueHandle_t results_queue = NULL;
+static QueueHandle_t stats_queue = NULL;
 
 /* Measurement data */
 static BaseType_t measurement_count = 1;
@@ -135,6 +136,8 @@ static void filtering_task_function(void *pvParameters)
     kalman_state_t * filter_state = NULL;
     measurement_t measurement_struct = {0};
     result_t result_struct = {0};
+    stats_t stats_struct = {0};
+    HeapStats_t heap_struct = {0};
 
     instance_number = xTaskGetInstanceNumber();
 
@@ -222,6 +225,11 @@ static void filtering_task_function(void *pvParameters)
                 result_struct.x_vel = x_kalman_filter->xp.data[1];
                 result_struct.y_vel = y_kalman_filter->xp.data[1];
                 xQueueSendToBack(results_queue, &result_struct, 0);
+
+                /* Get heap stats */
+                vPortGetHeapStats(&heap_struct);
+                stats_struct.heap_stats = heap_struct;
+                xQueueSendToBack(stats_queue, &stats_struct, 0);
             }
 
             /* Wait for the next measurement (timer update) */
@@ -237,21 +245,36 @@ static void print_measurement_data(void *pvParameters)
      */
     (void) pvParameters;
     result_t filtering_result = {0};
+    stats_t filtering_stats = {0};
     int data_point = 0;
 
     for(;;) {
         /* Print task waits for the result messages */
-        if (!uxQueueMessagesWaiting(results_queue))
+        if (!uxQueueMessagesWaiting(results_queue) && !uxQueueMessagesWaiting(stats_queue))
         {
             vTaskDelay(100);
             continue;
         }
 
-        data_point++;
-        xQueueReceive(results_queue, &filtering_result, 0);
+        if (uxQueueMessagesWaiting(results_queue)) {
+            data_point++;
+            xQueueReceive(results_queue, &filtering_result, 0);
 
-        SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
-            filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
+            SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
+                filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
+
+            continue;
+        }
+
+        if (uxQueueMessagesWaiting(stats_queue)) {
+            xQueueReceive(stats_queue, &filtering_stats, 0);
+
+            SERIAL_PRINT("%lu, %lu, %lu, %lu",
+                filtering_stats.heap_stats.xMinimumEverFreeBytesRemaining,
+                filtering_stats.heap_stats.xNumberOfFreeBlocks,
+                filtering_stats.heap_stats.xSizeOfLargestFreeBlockInBytes,
+                filtering_stats.heap_stats.xSizeOfSmallestFreeBlockInBytes);
+        }
     }
 }
 
@@ -318,6 +341,8 @@ static void fault_task_function(void *pvParameters)
                 modify_states(filter_storage.y_filters[1], -10);
                 HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
                 break;
+                /* Cause a bit flip on the task stack?? */
+                /* Or cause it on the entire memory?? */
             default:
                 break;
         }
@@ -346,6 +371,12 @@ void application_init(void)
 
     /* Result print queue creation */
     results_queue = xQueueCreate(MEASUREMENTS, sizeof(result_t));
+    if (!results_queue) {
+        while(1);
+    }
+
+    /* Runtime statistics queue */
+    stats_queue = xQueueCreate(MEASUREMENTS, sizeof(stats_t));
     if (!results_queue) {
         while(1);
     }

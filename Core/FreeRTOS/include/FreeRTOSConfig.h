@@ -54,7 +54,7 @@
 #define configCPU_CLOCK_HZ						( (unsigned long) SystemCoreClock )
 #define configTICK_RATE_HZ						( ( TickType_t ) 1000 )
 #define configMAX_PRIORITIES					( 5 )
-#define configMINIMAL_STACK_SIZE				( ( unsigned short ) 128 )
+#define configMINIMAL_STACK_SIZE				( ( unsigned short ) 256 )
 #define configTOTAL_HEAP_SIZE					( ( size_t ) ( 75 * 1024 ) )
 #define configMAX_TASK_NAME_LEN					( 20 )
 #define configUSE_TRACE_FACILITY				0
@@ -94,6 +94,9 @@ to exclude the API function. */
 #define configUSE_TEMPORAL_REDUNDANCY		1
 /* Number of task instances to be created */
 #define configTIME_REDUNDANT_INSTANCES		3
+
+/* Get task tick state and heap status after scheduler starts */
+#define configREDUNDANCY_RUNTIME_STATS		1
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS

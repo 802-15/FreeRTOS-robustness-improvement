@@ -355,6 +355,7 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         UBaseType_t uxExecResult;         /*< Stores arbitrary number representing execution result. */
         redundantTCB_t * pxRedundantTask; /*< Pointer to redundant task structure with global task information */
     #endif
+
 } tskTCB;
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
@@ -429,6 +430,11 @@ PRIVILEGED_DATA static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t
     PRIVILEGED_DATA static uint32_t ulTaskSwitchedInTime = 0UL;    /*< Holds the value of a timer/counter the last time a task was switched in. */
     PRIVILEGED_DATA static volatile uint32_t ulTotalRunTime = 0UL; /*< Holds the total amount of execution time as defined by the run time counter clock. */
 
+#endif
+
+#if ( configREDUNDANCY_RUNTIME_STATS == 1 )
+    /* Heap status at scheduler start */
+    static HeapStats_t xInitialHeapState = { 0 };
 #endif
 
 /*lint -restore */
@@ -2787,6 +2793,11 @@ void vTaskStartScheduler( void )
          * so interrupts will automatically get re-enabled when the first task
          * starts to run. */
         portDISABLE_INTERRUPTS();
+
+        #if ( configREDUNDANCY_RUNTIME_STATS == 1 )
+            /* Get heap state right after the scheduler starts */
+            vPortGetHeapStats( &xInitialHeapState );
+        #endif
 
         #if ( configUSE_NEWLIB_REENTRANT == 1 )
             {

@@ -65,7 +65,7 @@ extern "C" {
 #define TASK_FAILURE 1
 
 /* Application timings (ms) */
-#define CAUSE_FAULTS 1
+#define CAUSE_FAULTS 0
 #define TIMER_PERIOD 40
 #define FILTER_TIMEOUT 20
 #define FAULT_PERIOD 50
@@ -97,6 +97,11 @@ typedef struct result {
     double y_pos;
     double y_vel;
 } result_t;
+
+/* Place runtime stats in this structure */
+typedef struct runtime_stats {
+    HeapStats_t heap_stats;
+} stats_t;
 
 /* Start up the application */
 void application_init(void);
