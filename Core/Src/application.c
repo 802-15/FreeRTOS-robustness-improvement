@@ -76,13 +76,18 @@ static void displacement_data_update(TimerHandle_t xTimer)
     measurement_t measurement_struct = {0};
     static BaseType_t measurement_count = 1;
 
-    TASK_4_START
-
     /* Display the results if final measurement was reached */
     if (measurement_count >= MEASUREMENTS) {
         xTimerStop(xTimer, 0);
         vTaskSuspend(filter_task);
         vTaskSuspend(fault_task);
+
+        if (CAUSE_FAULTS == 2) {
+            HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
+            SERIAL_PRINT("Done,,,");
+            vTaskDelay(100/portTICK_RATE_MS);
+            NVIC_SystemReset();
+        }
 
         vTaskResume(print_task);
         gpio_led_state(LED6_BLUE_ID, 1);
@@ -102,7 +107,6 @@ static void displacement_data_update(TimerHandle_t xTimer)
     xQueueSendToBack(measurement_queue, &measurement_struct, 0);
 
     /* Reset the timer and toggle the PIN for tracing purposes */
-    TASK_4_FINISH;
     xTimerReset(xTimer, 0);
     vTaskResume(filter_task);
 }
@@ -113,6 +117,7 @@ static int check_thresholds(kf_t * x_filter, kf_t * y_filter, int instance_numbe
      * within one sampling interval. This is used to check if the filter values
      * have started to diverge. Check both x and y filters.
      */
+    #pragma GCC diagnostic ignored "-Wabsolute-value"
     if (fabs(x_filter->xp.data[0] - kalman_state->x_state[instance_number].data[0]) > 2.0) {
         return TASK_FAILURE;
     }
@@ -128,6 +133,7 @@ static int check_thresholds(kf_t * x_filter, kf_t * y_filter, int instance_numbe
     if (fabs(y_filter->xp.data[1] - kalman_state->y_state[instance_number].data[1] > 5.0)) {
         return TASK_FAILURE;
     }
+    #pragma GCC diagnostic pop
 
     return TASK_SUCCESS;
 }
@@ -226,7 +232,7 @@ static void filtering_task_function(void *pvParameters)
             /* First thread to leave the barrier clears the queue */
             xQueueReceive(measurement_queue, &measurement_struct, 0);
 
-            if (instance_number == 0 ) {
+            if (instance_number == 1 ) {
                 /* Send results to print queue */
                 result_struct.x_pos = x_kalman_filter->xp.data[0];
                 result_struct.y_pos = y_kalman_filter->xp.data[0];
@@ -271,19 +277,14 @@ static void print_measurement_data(void *pvParameters)
             SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
                 filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
 
-            /* If all the results are out, we should reset */
-            if (data_point == MEASUREMENTS && CAUSE_FAULTS == 2) {
-                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
-                NVIC_SystemReset();
-            }
-
             continue;
         }
 
         if (uxQueueMessagesWaiting(stats_queue) && PRINT_STATS == 1) {
             xQueueReceive(stats_queue, &filtering_stats, 0);
 
-            SERIAL_PRINT("%lu, %lu, %lu, %lu",
+            SERIAL_PRINT("%lu, %lu, %lu, %lu, %lu",
+                filtering_stats.heap_stats.xAvailableHeapSpaceInBytes,
                 filtering_stats.heap_stats.xMinimumEverFreeBytesRemaining,
                 filtering_stats.heap_stats.xNumberOfFreeBlocks,
                 filtering_stats.heap_stats.xSizeOfLargestFreeBlockInBytes,
@@ -355,6 +356,8 @@ static void fault_task_function(void *pvParameters)
             random_byte = ( int8_t * ) memory_address;
             /* Run this one in debugger! */
             * random_byte ^= ( 1 << get_random_integer() % 8);
+
+            vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
         }
 
         if (CAUSE_FAULTS == 2) {
@@ -366,12 +369,10 @@ static void fault_task_function(void *pvParameters)
             random_byte = ( int8_t * ) memory_address;
 
             SERIAL_PRINT("[Address, Address, Bit], 0x%x, %lu, %u", memory_address, random_uint % ram_size, random_uchar);
-            vTaskDelay(100/portTICK_RATE_MS);
+            vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
 
             * random_byte ^= ( 1 << random_uchar);
         }
-
-        vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
     }
 }
 
