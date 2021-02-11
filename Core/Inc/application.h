@@ -65,11 +65,12 @@ extern "C" {
 #define TASK_SUCCESS 0
 #define TASK_FAILURE 1
 
-/* Application timings (ms) */
-#define CAUSE_FAULTS 0
+/* Application timings (ms) and settings */
 #define TIMER_PERIOD 40
 #define FILTER_TIMEOUT 20
-#define FAULT_PERIOD 100
+#define FAULT_PERIOD 285
+
+#define CAUSE_FAULTS 0
 #define PRINT_STATS 0
 
 /* This struct holds kalman filter pointers */

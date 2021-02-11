@@ -125,7 +125,7 @@ void USART1_SendString(char *message)
   while(!USART1TransferCompleted);
 
   USART1TransferCompleted = 0;
-  HAL_UART_Transmit_IT(&huart1, (uint8_t *) message, message_size);
+  HAL_UART_Transmit_IT(&huart1, (uint8_t *) message, message_size+1);
 }
 
 /* USER CODE END 1 */

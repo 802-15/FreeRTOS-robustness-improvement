@@ -113,19 +113,19 @@ static int check_thresholds(kf_t * x_filter, kf_t * y_filter, int instance_numbe
      * within one sampling interval. This is used to check if the filter values
      * have started to diverge. Check both x and y filters.
      */
-    if (fabs(x_filter->xp.data[0] - kalman_state->x_state[instance_number].data[0]) > 5.0) {
+    if (fabs(x_filter->xp.data[0] - kalman_state->x_state[instance_number].data[0]) > 2.0) {
         return TASK_FAILURE;
     }
 
-    if (fabs(x_filter->xp.data[1] - kalman_state->x_state[instance_number].data[1] > 50.0)) {
+    if (fabs(x_filter->xp.data[1] - kalman_state->x_state[instance_number].data[1] > 5.0)) {
         return TASK_FAILURE;
     }
 
-    if (fabs(y_filter->xp.data[0] - kalman_state->y_state[instance_number].data[0]) > 5.0) {
+    if (fabs(y_filter->xp.data[0] - kalman_state->y_state[instance_number].data[0]) > 2.0) {
         return TASK_FAILURE;
     }
 
-    if (fabs(y_filter->xp.data[1] - kalman_state->y_state[instance_number].data[1] > 50.0)) {
+    if (fabs(y_filter->xp.data[1] - kalman_state->y_state[instance_number].data[1] > 5.0)) {
         return TASK_FAILURE;
     }
 
@@ -250,6 +250,7 @@ static void print_measurement_data(void *pvParameters)
     (void) pvParameters;
     result_t filtering_result = {0};
     stats_t filtering_stats = {0};
+    int data_point = 0;
 
     for(;;) {
         /* Print task waits for the result messages */
@@ -261,9 +262,15 @@ static void print_measurement_data(void *pvParameters)
 
         if (uxQueueMessagesWaiting(results_queue)) {
             xQueueReceive(results_queue, &filtering_result, 0);
+            data_point++;
 
             SERIAL_PRINT("%d, %.8lf, %.8lf, %.8lf, %.8lf ", data_point,
                 filtering_result.x_pos, filtering_result.x_vel, filtering_result.y_pos, filtering_result.y_vel);
+
+            /* If all the results are out, we should reset */
+            if (data_point == MEASUREMENTS && CAUSE_FAULTS == 2) {
+                NVIC_SystemReset();
+            }
 
             continue;
         }
@@ -353,7 +360,7 @@ static void fault_task_function(void *pvParameters)
             memory_address = (random_uint % ram_size) + ram_start;
             random_byte = ( int8_t * ) memory_address;
 
-            SERIAL_PRINT("Address: 0x%x, %lu, Bit: %u", memory_address, random_uint % ram_size, random_uchar);
+            SERIAL_PRINT("[Address, Address, Bit], 0x%x, %lu, %u", memory_address, random_uint % ram_size, random_uchar);
             vTaskDelay(100/portTICK_RATE_MS);
 
             * random_byte ^= ( 1 << random_uchar);

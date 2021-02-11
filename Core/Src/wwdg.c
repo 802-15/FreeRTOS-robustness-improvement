@@ -25,7 +25,8 @@
 void HAL_WWDG_EarlyWakeupCallback(WWDG_HandleTypeDef *hwwdg)
 {
   (void) hwwdg;
-  SERIAL_PRINT("watchdog reset!")
+  /* Toggle PE6 before reset */
+  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_6);
 }
 
 /* USER CODE END 0 */
