@@ -177,7 +177,9 @@ static void filtering_task_function(void *pvParameters)
     }
 
     for(;;) {
-            gpio_trace_instance(instance_number);
+            if (CAUSE_FAULTS == 1) {
+                gpio_trace_instance(instance_number);
+            }
 
             /* Predict the system state */
             kalman_predict(x_kalman_filter);
@@ -217,7 +219,9 @@ static void filtering_task_function(void *pvParameters)
             }
 
             /* Compare the results from multiple instances and run the failure handle if they differ */
-            gpio_trace_instance(instance_number);
+            if (CAUSE_FAULTS == 1) {
+                gpio_trace_instance(instance_number);
+            }
 
             /* First thread to leave the barrier clears the queue */
             xQueueReceive(measurement_queue, &measurement_struct, 0);
@@ -269,6 +273,7 @@ static void print_measurement_data(void *pvParameters)
 
             /* If all the results are out, we should reset */
             if (data_point == MEASUREMENTS && CAUSE_FAULTS == 2) {
+                HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
                 NVIC_SystemReset();
             }
 
@@ -343,7 +348,7 @@ static void fault_task_function(void *pvParameters)
         }
 
         /* Pin toggle for logic analyzer timing diagnostic */
-        HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
+        HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_5);
 
         if (CAUSE_FAULTS == 1) {
             /* Overwrite byte value or modify bit value manually */
@@ -452,5 +457,6 @@ void application_init(void)
     xTimerStart(measurement_timer, 0);
     vTaskSuspend(print_task);
 
+    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_2);
     vTaskStartScheduler();
 }

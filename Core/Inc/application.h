@@ -68,9 +68,9 @@ extern "C" {
 /* Application timings (ms) and settings */
 #define TIMER_PERIOD 40
 #define FILTER_TIMEOUT 20
-#define FAULT_PERIOD 285
+#define FAULT_PERIOD 286
 
-#define CAUSE_FAULTS 0
+#define CAUSE_FAULTS 2
 #define PRINT_STATS 0
 
 /* This struct holds kalman filter pointers */

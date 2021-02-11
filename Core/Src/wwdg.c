@@ -26,7 +26,7 @@ void HAL_WWDG_EarlyWakeupCallback(WWDG_HandleTypeDef *hwwdg)
 {
   (void) hwwdg;
   /* Toggle PE6 before reset */
-  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_6);
+  HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
 }
 
 /* USER CODE END 0 */
