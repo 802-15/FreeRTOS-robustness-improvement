@@ -68,7 +68,8 @@ extern "C" {
 /* Application timings (ms) and settings */
 #define TIMER_PERIOD 40
 #define FILTER_TIMEOUT 20
-#define FAULT_PERIOD 286
+#define FAULT_PERIOD 200
+#define FAULT_NUMBER 10
 
 #define CAUSE_FAULTS 2
 #define PRINT_STATS 0

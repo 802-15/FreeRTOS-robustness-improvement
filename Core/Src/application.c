@@ -83,6 +83,12 @@ static void displacement_data_update(TimerHandle_t xTimer)
         vTaskSuspend(fault_task);
 
         if (CAUSE_FAULTS == 2) {
+            SERIAL_PRINT("          %.8lf, %.8lf, %.8lf, %.8lf ",
+                filter_storage.x_filters[0]->xp.data[0],
+                filter_storage.x_filters[0]->xp.data[1],
+                filter_storage.y_filters[0]->xp.data[0],
+                filter_storage.y_filters[0]->xp.data[1]);
+
             HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
             SERIAL_PRINT("Done,,,");
             vTaskDelay(100/portTICK_RATE_MS);
@@ -111,30 +117,22 @@ static void displacement_data_update(TimerHandle_t xTimer)
     vTaskResume(filter_task);
 }
 
-static int check_thresholds(kf_t * x_filter, kf_t * y_filter, int instance_number)
+static int check_thresholds(void)
 {
-    /* Check if displacement and velocity have increased beyond acceptable limits
-     * within one sampling interval. This is used to check if the filter values
-     * have started to diverge. Check both x and y filters.
+    /* Check if displacement and velocity differ between filter results.
+     * Since double type variables are used to store states, comparison is done
+     * using a threshold.
      */
-    #pragma GCC diagnostic ignored "-Wabsolute-value"
-    if (fabs(x_filter->xp.data[0] - kalman_state->x_state[instance_number].data[0]) > 2.0) {
-        return TASK_FAILURE;
+    for (int i = 0; i < TASK_INSTANCES-1; i++) {
+        if ( \
+            fabs(filter_storage.x_filters[i]->xp.data[0] - filter_storage.x_filters[i+1]->xp.data[0]) > 1e-1 || \
+            fabs(filter_storage.x_filters[i]->xp.data[1] - filter_storage.x_filters[i+1]->xp.data[1]) > 1e-1 || \
+            fabs(filter_storage.y_filters[i]->xp.data[0] - filter_storage.y_filters[i+1]->xp.data[0]) > 1e-1 || \
+            fabs(filter_storage.y_filters[i]->xp.data[1] - filter_storage.y_filters[i+1]->xp.data[1]) > 1e-1 )
+            {
+                return TASK_FAILURE;
+            }
     }
-
-    if (fabs(x_filter->xp.data[1] - kalman_state->x_state[instance_number].data[1] > 5.0)) {
-        return TASK_FAILURE;
-    }
-
-    if (fabs(y_filter->xp.data[0] - kalman_state->y_state[instance_number].data[0]) > 2.0) {
-        return TASK_FAILURE;
-    }
-
-    if (fabs(y_filter->xp.data[1] - kalman_state->y_state[instance_number].data[1] > 5.0)) {
-        return TASK_FAILURE;
-    }
-    #pragma GCC diagnostic pop
-
     return TASK_SUCCESS;
 }
 
@@ -199,14 +197,14 @@ static void filtering_task_function(void *pvParameters)
             kalman_update(y_kalman_filter, measurement_struct.y_value);
 
             /* Evaluate states by checking if the application thresholds are met */
-            if (check_thresholds(x_kalman_filter, y_kalman_filter, instance_number) == TASK_SUCCESS) {
+            if (check_thresholds() == TASK_SUCCESS) {
                 instance_states = xTaskInstanceDone(TASK_SUCCESS);
             } else {
                 instance_states = xTaskInstanceDone(TASK_FAILURE);
             }
 
             /* Update last known good state if the execution is allright */
-            if (instance_states == pdTRUE && (check_thresholds(x_kalman_filter, y_kalman_filter, instance_number) == TASK_SUCCESS)) {
+            if (instance_states == pdTRUE && (check_thresholds() == TASK_SUCCESS)) {
                 /* Update system state */
                 kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
                 kalman_state->x_state[instance_number].data[1] = x_kalman_filter->xp.data[1];
@@ -307,6 +305,7 @@ static void filter_failure_handler(void)
         kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
     }
     /* Continue executing task */
+    SERIAL_PRINT("RESULTS,,,");
 }
 
 static void filter_timeout_handler(void)
@@ -323,6 +322,7 @@ static void filter_timeout_handler(void)
         kalman_destroy(filter_storage.x_filters[i]);
         kalman_destroy(filter_storage.y_filters[i]);
     }
+    SERIAL_PRINT("TIMEOUT,,,");
     /* Task is deleted and created again (restart) ...*/
 }
 
@@ -335,9 +335,14 @@ static void fault_task_function(void *pvParameters)
     uint32_t random_uint;
     int8_t * random_byte;
     uint8_t random_uchar;
+    int fault_number = 0;
 
-    const size_t ram_size = 0x20000;
-    const size_t ram_start = 0x20000000;
+    /* 0x20013090 0x200131c8 */
+    /* 0x690 */
+    /* 0x20000000 */
+    /* 0x2C00 */
+    const size_t ram_size = 0x690;
+    const size_t ram_start = 0x200131c8;
 
     /* Set up the failure location manually */
     size_t memory_address = 0x20000300;
@@ -346,6 +351,11 @@ static void fault_task_function(void *pvParameters)
         if (CAUSE_FAULTS == 0) {
             vTaskDelay(FAULT_PERIOD/portTICK_RATE_MS);
             continue;
+        }
+
+        fault_number++;
+        if (fault_number == FAULT_NUMBER) {
+            vTaskSuspend(fault_task);
         }
 
         /* Pin toggle for logic analyzer timing diagnostic */
@@ -386,7 +396,9 @@ void application_init(void)
     TaskFailureHandles_t failure_handles = {0};
 
     gpio_led_state(LED5_RED_ID, 1);
-    SERIAL_PRINT(INIT_MSG);
+    if (CAUSE_FAULTS == 2) {
+        SERIAL_PRINT(INIT_MSG);
+    }
 
     /* Measurement queue creation, single measurement */
     measurement_queue = xQueueCreate(1, sizeof(measurement_t));
