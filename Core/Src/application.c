@@ -230,6 +230,7 @@ static void filtering_task_function(void *pvParameters)
             /* First thread to leave the barrier clears the queue */
             xQueueReceive(measurement_queue, &measurement_struct, 0);
 
+            #if (CAUSE_FAULTS != 2)
             if (instance_number == 1 ) {
                 /* Send results to print queue */
                 result_struct.x_pos = x_kalman_filter->xp.data[0];
@@ -243,6 +244,7 @@ static void filtering_task_function(void *pvParameters)
                 stats_struct.heap_stats = heap_struct;
                 xQueueSendToBack(stats_queue, &stats_struct, 0);
             }
+            #endif
 
             /* Wait for the next measurement (timer update) */
             vTaskCallAPISynchronized(filter_task, vTaskSuspend);
@@ -406,6 +408,7 @@ void application_init(void)
         while(1);
     }
 
+    #if (CAUSE_FAULTS != 2)
     /* Result print queue creation */
     results_queue = xQueueCreate(MEASUREMENTS, sizeof(result_t));
     if (!results_queue) {
@@ -417,6 +420,7 @@ void application_init(void)
     if (!results_queue) {
         while(1);
     }
+    #endif
 
     /* Measurement receive timer: measurements arrive every 40 ms */
     measurement_timer = xTimerCreate((const char *) "Measurement", TIMER_PERIOD/portTICK_RATE_MS, pdFALSE,
@@ -470,6 +474,5 @@ void application_init(void)
     xTimerStart(measurement_timer, 0);
     vTaskSuspend(print_task);
 
-    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_2);
     vTaskStartScheduler();
 }
