@@ -51,6 +51,8 @@ static vector_t default_y_state = {0};
 static matrix_t default_x_cov = {0};
 static matrix_t default_y_cov = {0};
 
+uint32_t timing_cycles[TASK_INSTANCES] = {0};
+
 void vApplicationTickHook(void)
 {
     static int watchdog_active = 0;
@@ -152,6 +154,8 @@ static void filtering_task_function(void *pvParameters)
     result_t result_struct = {0};
     stats_t stats_struct = {0};
     HeapStats_t heap_struct = {0};
+    uint32_t timing_start = 0;
+    uint32_t timing_end = 0;
 
     instance_number = xTaskGetInstanceNumber();
 
@@ -181,6 +185,7 @@ static void filtering_task_function(void *pvParameters)
     }
 
     for(;;) {
+            timing_start = ARM_CM_DWT_CYCCNT;
             if (CAUSE_FAULTS == 1) {
                 gpio_trace_instance(instance_number);
             }
@@ -246,9 +251,16 @@ static void filtering_task_function(void *pvParameters)
             }
             #endif
 
+            timing_end = ARM_CM_DWT_CYCCNT;
+            timing_cycles[instance_number] = timing_end - timing_start;
+
             /* Wait for the next measurement (timer update) */
             vTaskCallAPISynchronized(filter_task, vTaskSuspend);
     }
+    /* Disable warnings */
+    (void) stats_struct;
+    (void) result_struct;
+    (void) heap_struct;
 }
 
 static void print_measurement_data(void *pvParameters)
@@ -474,5 +486,6 @@ void application_init(void)
     xTimerStart(measurement_timer, 0);
     vTaskSuspend(print_task);
 
+    reset_dwt_timer();
     vTaskStartScheduler();
 }

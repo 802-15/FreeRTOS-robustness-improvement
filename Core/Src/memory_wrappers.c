@@ -149,4 +149,12 @@ void __malloc_unlock(struct _reent *r)
     taskEXIT_CRITICAL();
 }
 
+void reset_dwt_timer(void)
+{
+    ARM_CM_DWT_CTRL   &= 0xFFFFFFFFE;
+    ARM_CM_DEMCR      |= 1 << 24;
+    ARM_CM_DWT_CYCCNT  = 0;
+    ARM_CM_DWT_CTRL   |= 1 << 0;
+}
+
 #endif /* USE_MALLOC */

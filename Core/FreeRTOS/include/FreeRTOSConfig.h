@@ -93,7 +93,7 @@ to exclude the API function. */
 /* Enable time redundancy: set up multiple task instances with xTaskCreate */
 #define configUSE_TEMPORAL_REDUNDANCY		1
 /* Number of task instances to be created */
-#define configTIME_REDUNDANT_INSTANCES		3
+#define configTIME_REDUNDANT_INSTANCES		5
 
 /* Get task tick state and heap status after scheduler starts */
 #define configREDUNDANCY_RUNTIME_STATS		1
