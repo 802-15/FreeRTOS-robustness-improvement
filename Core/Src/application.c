@@ -52,7 +52,7 @@ static matrix_t default_x_cov = {0};
 static matrix_t default_y_cov = {0};
 
 static int data_corrupted = 0;
-uint32_t timing_cycles = 0;
+uint32_t timing_cycles[TASK_INSTANCES] = {0};
 
 void vApplicationTickHook(void)
 {
@@ -120,7 +120,10 @@ static void displacement_data_update(TimerHandle_t xTimer)
     /* Block if the queue was not emptied by the filtering task */
     if(uxQueueMessagesWaiting(measurement_queue) == 1)
     {
-        for(;;);
+        //for(;;);
+        SERIAL_PRINT("OSYNC");
+        vTaskDelay(100);
+        NVIC_SystemReset();
     }
     xQueueSendToBack(measurement_queue, &measurement_struct, 0);
 
@@ -177,6 +180,8 @@ static void filtering_task_function(void *pvParameters)
     }
 
     for(;;) {
+            timing_start = ARM_CM_DWT_CYCCNT;
+
             if (CAUSE_FAULTS == 1) {
                 gpio_trace_instance(instance_number);
             }
@@ -194,17 +199,7 @@ static void filtering_task_function(void *pvParameters)
 
             /* Send out the result to other nodes; distance in centimiters from the starting point */
             task_result = (uint32_t ) 1e3 * fabs(fabs(filter_storage.x_filters[0]->xp.data[0] -  0.0753) - fabs(filter_storage.y_filters[0]->xp.data[0] - (-0.2801)));
-
-            if ( instance_number == 0 ) {
-                timing_start = ARM_CM_DWT_CYCCNT;
-            }
-
             instance_states = xTaskInstanceDone(task_result);
-
-            if ( instance_number == 0 ) {
-                timing_end = ARM_CM_DWT_CYCCNT;
-                timing_cycles = timing_end - timing_start;
-            }
 
             /* Update last known good state if the execution is allright */
             if (instance_states == pdTRUE) {
@@ -248,6 +243,9 @@ static void filtering_task_function(void *pvParameters)
                 xQueueSendToBack(stats_queue, &stats_struct, 0);
             }
             #endif
+
+            timing_end = ARM_CM_DWT_CYCCNT;
+            timing_cycles[instance_number] = timing_end - timing_start;
 
             /* Wait for the next measurement (timer update) */
             vTaskCallAPISynchronized(filter_task, vTaskSuspend);
@@ -316,19 +314,18 @@ static void filter_failure_handler(void)
             kalman_destroy(filter_storage.y_filters[i]);
         }
         memset(kalman_state, 0, sizeof(kalman_state_t));
-                SERIAL_PRINT("RESULT_CORRUPTED,,,")
+        SERIAL_PRINT("RESULT_CORRUPTED,,,")
+        data_corrupted = 0;
         xTaskReset(&filter_task);
+    } else {
+        for (int i = 0; i < TASK_INSTANCES; i++) {
+            kalman_init(&filter_storage.x_filters[i]->xp, &filter_storage.x_filters[i]->Pp, &kalman_state->x_state[i], &kalman_state->x_cov[i]);
+            kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
+        }
+        /* Continue executing task */
+        SERIAL_PRINT("RESULTS,,,");
     }
-
-    for (int i = 0; i < TASK_INSTANCES; i++) {
-        kalman_init(&filter_storage.x_filters[i]->xp, &filter_storage.x_filters[i]->Pp, &kalman_state->x_state[i], &kalman_state->x_cov[i]);
-        kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
-    }
-
     data_corrupted = 1;
-
-    /* Continue executing task */
-    SERIAL_PRINT("RESULTS,,,");
 }
 
 static void filter_timeout_handler(void)
@@ -428,7 +425,6 @@ void application_init(void)
     if (CAUSE_FAULTS != 2) {
         SERIAL_PRINT(INIT_MSG);
     }
-    SERIAL_PRINT("START,,,");
 
     /* Measurement queue creation, single measurement */
     measurement_queue = xQueueCreate(1, sizeof(measurement_t));

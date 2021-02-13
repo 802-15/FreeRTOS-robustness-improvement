@@ -101,7 +101,7 @@ to exclude the API function. */
 /* Enable spatial redundancy: tasks are synchronized across multiple CPUs */
 #define configUSE_SPATIAL_REDUNDANCY		1
 /* The number of physical nodes must match this configuration option */
-#define configCAN_NODES						2
+#define configCAN_NODES						3
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
