@@ -51,6 +51,9 @@ static vector_t default_y_state = {0};
 static matrix_t default_x_cov = {0};
 static matrix_t default_y_cov = {0};
 
+static int data_corrupted = 0;
+uint32_t timing_cycles = 0;
+
 void vApplicationTickHook(void)
 {
     static int watchdog_active = 0;
@@ -62,6 +65,18 @@ void vApplicationTickHook(void)
 
     /* Refresh the watchdog on FreeRTOS tick */
     HAL_WWDG_Refresh(&hwwdg);
+}
+
+static void check_final_result(void)
+{
+    /* Run the final value against the final result and signal the logic analyzer */
+    if ( \
+        fabs(filter_storage.x_filters[0]->xp.data[0] - (-1.92119181)) > 1e-1 || \
+        fabs(filter_storage.y_filters[0]->xp.data[0] - (1.89413702)) > 1e-1 ) {
+            return;
+        }
+    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_3);
+    SERIAL_PRINT("SUCCESS,,,");
 }
 
 static void displacement_data_update(TimerHandle_t xTimer)
@@ -83,13 +98,10 @@ static void displacement_data_update(TimerHandle_t xTimer)
         vTaskSuspend(fault_task);
 
         if (CAUSE_FAULTS == 2) {
-            SERIAL_PRINT("          %.8lf, %.8lf, %.8lf, %.8lf ",
-                filter_storage.x_filters[0]->xp.data[0],
-                filter_storage.x_filters[0]->xp.data[1],
-                filter_storage.y_filters[0]->xp.data[0],
-                filter_storage.y_filters[0]->xp.data[1]);
+            check_final_result();
+            vTaskDelay(100/portTICK_RATE_MS);
 
-            HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_4);
+            HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_1);
             SERIAL_PRINT("Done,,,");
             vTaskDelay(100/portTICK_RATE_MS);
             NVIC_SystemReset();
@@ -117,25 +129,6 @@ static void displacement_data_update(TimerHandle_t xTimer)
     vTaskResume(filter_task);
 }
 
-static int check_thresholds(void)
-{
-    /* Check if displacement and velocity differ between filter results.
-     * Since double type variables are used to store states, comparison is done
-     * using a threshold.
-     */
-    for (int i = 0; i < TASK_INSTANCES-1; i++) {
-        if ( \
-            fabs(filter_storage.x_filters[i]->xp.data[0] - filter_storage.x_filters[i+1]->xp.data[0]) > 1e-1 || \
-            fabs(filter_storage.x_filters[i]->xp.data[1] - filter_storage.x_filters[i+1]->xp.data[1]) > 1e-1 || \
-            fabs(filter_storage.y_filters[i]->xp.data[0] - filter_storage.y_filters[i+1]->xp.data[0]) > 1e-1 || \
-            fabs(filter_storage.y_filters[i]->xp.data[1] - filter_storage.y_filters[i+1]->xp.data[1]) > 1e-1 )
-            {
-                return TASK_FAILURE;
-            }
-    }
-    return TASK_SUCCESS;
-}
-
 static void filtering_task_function(void *pvParameters)
 {
     /* Initialize two single-axis kinematic kalman filters used to
@@ -152,6 +145,9 @@ static void filtering_task_function(void *pvParameters)
     result_t result_struct = {0};
     stats_t stats_struct = {0};
     HeapStats_t heap_struct = {0};
+    uint32_t task_result = 0;
+    uint32_t timing_start = 0;
+    uint32_t timing_end = 0;
 
     instance_number = xTaskGetInstanceNumber();
 
@@ -196,15 +192,22 @@ static void filtering_task_function(void *pvParameters)
             kalman_update(x_kalman_filter, measurement_struct.x_value);
             kalman_update(y_kalman_filter, measurement_struct.y_value);
 
-            /* Evaluate states by checking if the application thresholds are met */
-            if (check_thresholds() == TASK_SUCCESS) {
-                instance_states = xTaskInstanceDone(TASK_SUCCESS);
-            } else {
-                instance_states = xTaskInstanceDone(TASK_FAILURE);
+            /* Send out the result to other nodes; distance in centimiters from the starting point */
+            task_result = (uint32_t ) 1e3 * fabs(fabs(filter_storage.x_filters[0]->xp.data[0] -  0.0753) - fabs(filter_storage.y_filters[0]->xp.data[0] - (-0.2801)));
+
+            if ( instance_number == 0 ) {
+                timing_start = ARM_CM_DWT_CYCCNT;
+            }
+
+            instance_states = xTaskInstanceDone(task_result);
+
+            if ( instance_number == 0 ) {
+                timing_end = ARM_CM_DWT_CYCCNT;
+                timing_cycles = timing_end - timing_start;
             }
 
             /* Update last known good state if the execution is allright */
-            if (instance_states == pdTRUE && (check_thresholds() == TASK_SUCCESS)) {
+            if (instance_states == pdTRUE) {
                 /* Update system state */
                 kalman_state->x_state[instance_number].data[0] = x_kalman_filter->xp.data[0];
                 kalman_state->x_state[instance_number].data[1] = x_kalman_filter->xp.data[1];
@@ -249,6 +252,11 @@ static void filtering_task_function(void *pvParameters)
             /* Wait for the next measurement (timer update) */
             vTaskCallAPISynchronized(filter_task, vTaskSuspend);
     }
+
+    /* Disable warnings */
+    (void) stats_struct;
+    (void) result_struct;
+    (void) heap_struct;
 }
 
 static void print_measurement_data(void *pvParameters)
@@ -300,12 +308,25 @@ static void filter_failure_handler(void)
      * correct state.
      */
 
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
+    HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_2);
+
+    if (data_corrupted) {
+        for (int i = 0; i < TASK_INSTANCES; i++) {
+            kalman_destroy(filter_storage.x_filters[i]);
+            kalman_destroy(filter_storage.y_filters[i]);
+        }
+        memset(kalman_state, 0, sizeof(kalman_state_t));
+                SERIAL_PRINT("RESULT_CORRUPTED,,,")
+        xTaskReset(&filter_task);
+    }
 
     for (int i = 0; i < TASK_INSTANCES; i++) {
         kalman_init(&filter_storage.x_filters[i]->xp, &filter_storage.x_filters[i]->Pp, &kalman_state->x_state[i], &kalman_state->x_cov[i]);
         kalman_init(&filter_storage.y_filters[i]->xp, &filter_storage.y_filters[i]->Pp, &kalman_state->y_state[i], &kalman_state->y_cov[i]);
     }
+
+    data_corrupted = 1;
+
     /* Continue executing task */
     SERIAL_PRINT("RESULTS,,,");
 }
@@ -326,6 +347,12 @@ static void filter_timeout_handler(void)
     }
     SERIAL_PRINT("TIMEOUT,,,");
     /* Task is deleted and created again (restart) ...*/
+}
+
+static void can_timeout_handler(void)
+{
+    SERIAL_PRINT("CAN-TIMEOUT,,,");
+    NVIC_SystemReset();
 }
 
 static void fault_task_function(void *pvParameters)
@@ -356,7 +383,7 @@ static void fault_task_function(void *pvParameters)
         }
 
         fault_number++;
-        if (fault_number == FAULT_NUMBER) {
+        if (fault_number >= FAULT_NUMBER) {
             vTaskSuspend(fault_task);
         }
 
@@ -398,9 +425,10 @@ void application_init(void)
     failureHandles_t failure_handles = {0};
 
     gpio_led_state(LED5_RED_ID, 1);
-    if (CAUSE_FAULTS == 2) {
+    if (CAUSE_FAULTS != 2) {
         SERIAL_PRINT(INIT_MSG);
     }
+    SERIAL_PRINT("START,,,");
 
     /* Measurement queue creation, single measurement */
     measurement_queue = xQueueCreate(1, sizeof(measurement_t));
@@ -464,8 +492,14 @@ void application_init(void)
     /* Task failure restoration/cleanup functions */
     failure_handles.pvRemoteFailureFunc = filter_failure_handler;
     failure_handles.pvLocalTimeoutFunc = filter_timeout_handler;
-    failure_handles.pvRemoteTimeoutFunc = NULL;
+    failure_handles.pvRemoteTimeoutFunc = can_timeout_handler;
     vTaskRegisterFailureCallback(filter_task, &failure_handles);
+
+    /* Set up the CAN peripheral */
+    CAN2_Register();
+
+    /* Register the task on CAN bus */
+    vTaskCANRegister(filter_task);
 
     /* Store pointer to shared task data - pointer to global variable is stored for demonstration purposes */
     kalman_state = user_malloc(sizeof(kalman_state_t));
@@ -475,5 +509,6 @@ void application_init(void)
     xTimerStart(measurement_timer, 0);
     vTaskSuspend(print_task);
 
+    reset_dwt_timer();
     vTaskStartScheduler();
 }

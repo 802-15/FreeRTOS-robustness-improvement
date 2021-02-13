@@ -32,6 +32,11 @@
 #ifndef __MEMORY_WRAPPERS_H
 #define __MEMORY_WRAPPERS_H
 
+/* Track execution cycles using DWT registers */
+#define ARM_CM_DEMCR      (*(uint32_t *)0xE000EDFC)
+#define ARM_CM_DWT_CTRL   (*(uint32_t *)0xE0001000)
+#define ARM_CM_DWT_CYCCNT (*(uint32_t *)0xE0001004)
+
 /* Select using possibly non deterministic newlib malloc/free scheme
  * versus FreeRTOS heap located in the BSS static array */
 #define USE_MALLOC 1
@@ -56,5 +61,6 @@
 /* Use these functions in the application layer to provide dynamic memory management */
 void * user_malloc(size_t size);
 void user_free(void * ptr);
+void reset_dwt_timer(void);
 
 #endif /* __MEMORY_WRAPPERS_H */

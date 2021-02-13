@@ -39,6 +39,7 @@
 #include "task.h"
 #include "timers.h"
 
+#include "can.h"
 #include "gpio.h"
 #include "kalman.h"
 #include "kalman_data.h"

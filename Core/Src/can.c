@@ -324,7 +324,7 @@ void CAN2_Register(void)
    * executing the local and remote timeout functions before
    * sending their messages.
    */
-  canHandlers.xCANTimeout = 750/portTICK_RATE_MS;
+  canHandlers.xCANTimeout = 1000/portTICK_RATE_MS;
 
   /*
    * NVIC subpriority bits must be disabled before calling
