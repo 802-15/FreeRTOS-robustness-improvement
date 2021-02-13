@@ -55,6 +55,24 @@ void gpio_trace_instance(uint8_t task_instance)
       break;
   }
 }
+
+void gpio_led_toggle(uint8_t LED_ID)
+{
+  switch(LED_ID) {
+      case LED3_ORANGE_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED3_ORANGE_PinNumber);
+        break;
+      case LED4_GREEN_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED4_GREEN_PinNumber);
+        break;
+      case LED5_RED_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED5_RED_PinNumber);
+        break;
+      case LED6_BLUE_ID:
+        HAL_GPIO_TogglePin(GPIOD, LED6_BLUE_PinNumber);
+        break;
+  }
+}
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/
@@ -82,6 +100,7 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5

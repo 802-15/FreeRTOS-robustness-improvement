@@ -98,6 +98,11 @@ to exclude the API function. */
 /* Get task tick state and heap status after scheduler starts */
 #define configREDUNDANCY_RUNTIME_STATS		1
 
+/* Enable spatial redundancy: tasks are synchronized across multiple CPUs */
+#define configUSE_SPATIAL_REDUNDANCY		1
+/* The number of physical nodes must match this configuration option */
+#define configCAN_NODES						2
+
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
 	/* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */

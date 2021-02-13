@@ -122,6 +122,7 @@ typedef void (* TaskFunction_t)( void * );
     #define pdFREERTOS_INSTANCE_RUNNING     ( ( BaseType_t ) 1 )
     #define pdFREERTOS_INSTANCE_DONE        ( ( BaseType_t ) 2 )
     #define pdFREERTOS_INSTANCE_FAILED      ( ( BaseType_t ) 3 )
+    #define pdFREERTOS_INSTANCE_TIMEOUT     ( ( BaseType_t ) 4 )
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
 #endif /* PROJDEFS_H */

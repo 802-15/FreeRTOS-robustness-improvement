@@ -61,6 +61,11 @@ typedef struct barrierHandle
     TimerHandle_t xBarrierTimer;          /*< Barrier can time out if the instances take too long to complete */
 
     callbackContainer_t pxCallbackStruct; /*< Stores pointer to callback function */
+
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        SemaphoreHandle_t xRemoteCounterMutex; /*< Protect the remote counter */
+        UBaseType_t uxRemoteCounter;           /*< Store the pointer to the remote counter */
+    #endif
 } barrierHandle_t;
 
 /**

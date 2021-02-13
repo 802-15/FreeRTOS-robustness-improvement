@@ -395,7 +395,7 @@ void application_init(void)
      * controling the filter execution.
      */
     BaseType_t error = 0;
-    TaskFailureHandles_t failure_handles = {0};
+    failureHandles_t failure_handles = {0};
 
     gpio_led_state(LED5_RED_ID, 1);
     if (CAUSE_FAULTS == 2) {
@@ -462,8 +462,9 @@ void application_init(void)
     default_y_cov.data[1][1] = 0.2;
 
     /* Task failure restoration/cleanup functions */
-    failure_handles.pvResultFailure = filter_failure_handler;
-    failure_handles.pvTimeoutFailure = filter_timeout_handler;
+    failure_handles.pvRemoteFailureFunc = filter_failure_handler;
+    failure_handles.pvLocalTimeoutFunc = filter_timeout_handler;
+    failure_handles.pvRemoteTimeoutFunc = NULL;
     vTaskRegisterFailureCallback(filter_task, &failure_handles);
 
     /* Store pointer to shared task data - pointer to global variable is stored for demonstration purposes */

@@ -59,6 +59,8 @@ void SysTick_Handler(void);
 void WWDG_IRQHandler(void);
 void USART1_IRQHandler(void);
 void HASH_RNG_IRQHandler(void);
+void CAN2_RX0_IRQHandler(void);
+void CAN2_RX1_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */

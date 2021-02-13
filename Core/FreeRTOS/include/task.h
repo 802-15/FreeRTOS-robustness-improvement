@@ -358,13 +358,16 @@ typedef void (* TaskFailureFunction_t ) ( void );
 typedef void (* TaskAPICode_t ) ( TaskHandle_t );
 
 /*
- * Pass redundant task failure functions to FreeRTOS using this structure
+ * This is used to pass user defined failure handles to FreeRTOS.
+ * After an instance is done executing, the task state will be evaluated
+ * and the appropriate function will be called.
  */
 typedef struct
 {
-    TaskFailureFunction_t pvResultFailure;
-    TaskFailureFunction_t pvTimeoutFailure;
-} TaskFailureHandles_t;
+    TaskFailureFunction_t pvLocalTimeoutFunc;   /* Local time-redundant results differ */
+    TaskFailureFunction_t pvRemoteFailureFunc;  /* Remote (CAN) results differ */
+    TaskFailureFunction_t pvRemoteTimeoutFunc;  /* Remote (CAN) message timeout */
+} failureHandles_t;
 
 /**
  * task.h
@@ -441,23 +444,24 @@ typedef struct
 /**
  * task.h
  * <pre>
- * void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
- *                                    TaskFailureHandles_t pxFailureHandles );
+ *  void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
+ *                                     failureHandles_t * pxFailureHandles );
  * </pre>
  *
- * Register failure functions for a redundant task.
+ * Register failure functions for the redundant task.
  *
- * Pass pointers to two user defined functions, activated when the
- * redundant task results differ, or if the task times out.
+ * The function pointer must be supplied in the struct argument.
+ * The function itself should run some kind of error handling
+ * defined by the user.
  *
  *
  * @param taskHandle Redundant task handle
  *
- * @param pxFailureHandles Pointer to struct containing failure handles
+ * @param pxFailureHandles Pointer to struct containing all the failure function pointers
  *
  */
-    void vTaskRegisterFailureCallback( TaskHandle_t taskHandle,
-                                      TaskFailureHandles_t * pxFailureHandles );
+    void vTaskRegisterFailureCallback( TaskHandle_t TaskHandle,
+                                       failureHandles_t * pxFailureHandles );
 
 /**
  * task.h
@@ -495,10 +499,22 @@ typedef struct
  * BaseType_t xTaskInstanceDone( UBaseType_t uxExecResult ) PRIVILEGED_FUNCTION;
  * </pre>
  *
- * Explicitly mark the end of one instance of the task. The instance
- * can be set to the completed ('DONE') state by passing pdPASS or
- * it can set to the failed state by passing any other integer. The redundant
- * task threads will synchronize inside this function.
+ * Explicitly mark the end of one instance of the task. The result of the
+ * currently running instance is sent using the only function argument.
+ *
+ * There are two distinct task instance types:
+ * 1) LOCAL task instances - executed locally, these instances will be marked
+ * as "failed" if their execution results differ.
+ * 2) REMOTE task instances - their results obtained using CAN messages,
+ * and are available from a global array in tasks.c
+ *
+ * The LOCAL will block until they all reach this funtion or until the
+ * barrier watchdog timer is triggered.
+ *
+ * The remote threads will block until both syncrhonization and arbitration
+ * messages are exchanged.
+ *
+ * If local OR or remote threads fail, the failure handle will be executed.
  *
  * @param uxExecResult This variable stores the task execution result for the
  * current instance
@@ -526,6 +542,58 @@ typedef struct
     BaseType_t xTaskReset( TaskHandle_t * xTaskToRestart );
 
 #endif /* configSUPPORT_DYNAMIC_ALLOCATION && configUSE_TEMPORAL_REDUNDANCY */
+
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+/**
+* task.h
+* <pre>
+* void vTaskCANRegister( TaskHandle_t xCANTask );
+* </pre>
+*
+* Pass the task handle and toggle the task CAN synchronization
+* bit. If the synchronization is set then the task will wait for
+* can messages and evaluate execution remotely.
+*
+* @param xCANTask CAN task handle
+*
+*/
+    void vTaskCANRegister( TaskHandle_t xCANTask );
+
+/**
+* task.h
+* <pre>
+* void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType );
+* </pre>
+*
+* Save the task result to the global array for voting on the
+* correct result later. The task result values get stored
+* if the remote instances have finished succesfully. The barrier
+* is signaled from this function since TCB pointers are available
+* only inside the task module.
+*
+* @param uxTaskState The remote task state
+*
+* @param uxTaskResult Task result
+*
+* @param xMessageType Syncrhonization or abritration message, will decide on the barrier state
+*
+*/
+    void vTaskRemoteData( UBaseType_t uxTaskState, uint32_t uxTaskResult, BaseType_t xMessageType );
+
+/**
+* task.h
+* <pre>
+* void vTaskCANDisable( void );
+* </pre>
+*
+* Calling this function will prevent the kernel from synchronizing the
+* redundant task previously registered as the "CAN task".
+*
+*/
+    void vTaskCANDisable( void );
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */
 
 /**
  * task. h

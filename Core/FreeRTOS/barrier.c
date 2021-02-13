@@ -77,6 +77,17 @@ BaseType_t xBarrierCreate( barrierHandle_t ** pxTaskBarrierHandle,
         goto error_out;
     }
 
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        pxBarrierHandle->uxRemoteCounter = 0;
+
+        pxBarrierHandle->xRemoteCounterMutex = xSemaphoreCreateMutex();
+
+        if( !pxBarrierHandle->xRemoteCounterMutex )
+        {
+            goto error_out;
+        }
+    #endif
+
     /* The semaphore should be given/taken by threads one by one */
     pxBarrierHandle->xBarrierSemaphore = xSemaphoreCreateCounting( 1, 1 );
 
@@ -105,7 +116,11 @@ error_out:
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
     xTimerDelete( pxBarrierHandle->xBarrierTimer, 0 );
     vPortFree( pxBarrierHandle );
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        vSemaphoreDelete( pxBarrierHandle->xRemoteCounterMutex );
+    #endif
     pxBarrierHandle = NULL;
+
     return pdFREERTOS_ERRNO_ENOMEM;
 }
 
@@ -192,6 +207,11 @@ void vBarrierDestroy( barrierHandle_t * pxBarrierHandle )
 
     vSemaphoreDelete( pxBarrierHandle->xCounterMutex );
     vSemaphoreDelete( pxBarrierHandle->xBarrierSemaphore );
+
+    #if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+        vSemaphoreDelete( pxBarrierHandle->xRemoteCounterMutex );
+    #endif
+
     vPortFree( pxBarrierHandle );
 
     taskEXIT_CRITICAL();

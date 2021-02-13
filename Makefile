@@ -67,10 +67,13 @@ Core/Src/application.c \
 Core/Src/rng.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rng.c \
 Core/Src/wwdg.c \
-Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_wwdg.c
+Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_wwdg.c \
+Core/Src/can.c \
+Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c
 
 FREERTOS_SOURCES = \
 Core/FreeRTOS/barrier.c \
+Core/FreeRTOS/can_messenger.c \
 Core/FreeRTOS/croutine.c \
 Core/FreeRTOS/event_groups.c \
 Core/FreeRTOS/list.c \

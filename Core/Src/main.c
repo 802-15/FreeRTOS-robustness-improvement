@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "rng.h"
+#include "can.h"
 #include "usart.h"
 #include "wwdg.h"
 #include "gpio.h"
@@ -65,6 +66,9 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+  int error = 0;
+  failureHandles_t failure_handles = {0};
+
   /* Start up the peripherals */
   HAL_Init();
   SystemClock_Config();

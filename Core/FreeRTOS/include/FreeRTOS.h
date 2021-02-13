@@ -291,6 +291,33 @@
 
 #endif /* configUSE_TEMPORAL_REDUNDANCY */
 
+#ifndef configUSE_SPATIAL_REDUNDANCY
+    #define configUSE_SPATIAL_REDUNDANCY 0
+#endif
+
+#if ( configUSE_SPATIAL_REDUNDANCY == 1 )
+
+    #if configUSE_TEMPORAL_REDUNDANCY == 0
+        #error If configUSE_SPATIAL_REDUNDANCY is set, then configUSE_TEMPORAL_REDUNDANCY also needs to be set.
+    #endif
+
+    /* Default option for the CAN queue length: if it is too small,
+     * messages might be missed */
+    #ifndef configCAN_QUEUE_LENGTH
+        #define configCAN_QUEUE_LENGTH 10
+    #endif
+
+    /* This must match the number of nodes on the network */
+    #ifndef configCAN_NODES
+        #define configCAN_NODES 2
+    #endif
+
+    #if ( configCAN_NODES < 2 || configCAN_NODES > 3 )
+        #error configCAN_NODES option must be 2 or 3!
+    #endif
+
+#endif /* configUSE_SPATIAL_REDUNDANCY */
+
 #if configMAX_TASK_NAME_LEN < 1
     #error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
 #endif
