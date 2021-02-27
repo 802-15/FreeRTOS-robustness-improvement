@@ -158,6 +158,7 @@ C_INCLUDES =  \
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
 CFLAGS = $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -Wpedantic -Wextra -fdata-sections -ffunction-sections -Wno-implicit-fallthrough
+CFLAGS += -fstack-usage
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
@@ -237,6 +238,16 @@ format:
 	uncrustify -c uncrustify.cfg --no-backup \
 	Core/FreeRTOS/*.c \
 	Core/FreeRTOS/include/*.h
+
+#######################################
+# run static analysis using pc-lint
+#
+#######################################
+pclint:
+	pclp64_linux \
+	--i"Core/FreeRTOS/include" \
+	--i"Core/FreeRTOS/portable/GCC/ARM_CM4F" \
+	Core/Debug/co-gcc.lnt $(FREERTOS_SOURCES)
 
 #######################################
 # clean up
